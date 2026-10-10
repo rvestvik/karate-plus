@@ -64,6 +64,7 @@ describe('campaign', () => {
     expect(out.campaign.playerBelt).toBe(1);
     expect(out.campaign.round).toBe(2);
     expect(out.campaign.cpus.find((x) => x.id === 'blue')?.belt).toBe(2);
+    expect(out.campaign.cpus.find((x) => x.id === 'red')?.belt).toBe(2);
     expect(out.earned).toBe(2 * POINTS_PER_HALF + FIRST_PLACE_BONUS);
   });
 

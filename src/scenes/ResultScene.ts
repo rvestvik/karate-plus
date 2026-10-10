@@ -54,6 +54,14 @@ export class ResultScene extends Phaser.Scene {
         align: 0.5,
         color: LABEL[newcomer.id],
       });
+      const survivor = out.campaign.cpus.find((c) => c.id !== out.eliminated)!;
+      const before = data.campaign.cpus.find((c) => c.id === survivor.id)!;
+      if (survivor.belt > before.belt) {
+        pixelText(this, 160, 160, `${survivor.id} MOVES UP TO ${BELTS[survivor.belt].name}`, {
+          align: 0.5,
+          color: LABEL[survivor.id],
+        });
+      }
     }
 
     const prompt = pixelText(this, 160, 186, 'PRESS FIRE', { align: 0.5 });

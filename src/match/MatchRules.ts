@@ -123,8 +123,8 @@ export interface RoundOutcome {
 /**
  * Applies a finished round, given the final standings (last one standing
  * first). If the player was the first out the game is over; otherwise a
- * stronger CPU takes that spot and the player is promoted one belt for being
- * the last one standing.
+ * stronger CPU takes that spot, the surviving CPU moves up a belt, and the
+ * player is promoted one belt for being the last one standing.
  */
 export function advanceCampaign(c: Campaign, ranking: Competitor[]): RoundOutcome {
   const player = ranking.find((r) => r.isPlayer);
@@ -139,7 +139,9 @@ export function advanceCampaign(c: Campaign, ranking: Competitor[]): RoundOutcom
     playerBelt: promoted ? c.playerBelt + 1 : c.playerBelt,
     totalScore: c.totalScore + earned,
     cpus: c.cpus.map((cpu) =>
-      cpu.id === loser.id ? { id: cpu.id, belt: Math.min(MAX_BELT, c.round + 1) } : { ...cpu },
+      cpu.id === loser.id
+        ? { id: cpu.id, belt: Math.min(MAX_BELT, c.round + 1) }
+        : { id: cpu.id, belt: Math.min(MAX_BELT, cpu.belt + 1) },
     ),
   };
   return { campaign: next, eliminated: loser.id, promoted, gameOver, earned };
