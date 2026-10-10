@@ -27,4 +27,6 @@ Arrows/WASD to move, Space/J for fire, M to mute. Gamepads work too. Directions 
 
 ## Rules
 
-Three fighters, 30 second rounds, first to 6 points ends the round early. A strike that lands with the tip of the limb at the right range is a full point, while a jammed or glancing strike is a half point. Last place is eliminated. Win a round outright to earn the next belt.
+Three fighters enter each round, and it goes on until only one is left standing. Each fighter has 3 lives. Any scoring strike knocks the other fighter down and costs them a life. They get back up after a moment, briefly protected while they flicker, and the fight carries on without stopping. A fighter who loses their last life stays down and is out.
+
+A strike that lands with the tip of the limb at the right range is a full point, while a jammed or glancing strike is a half point. Points count towards your score. Be the last one standing to earn the next belt. If you're the first one out, the game is over.

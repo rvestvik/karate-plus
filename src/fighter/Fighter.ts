@@ -3,6 +3,8 @@ import {
   ARENA_MAX_X,
   ARENA_MIN_X,
   AUTO_TURN_FRAMES,
+  DOWN_FRAMES,
+  GRACE_FRAMES,
   GROUND_Y,
   WALK_BACK,
   WALK_FORWARD,
@@ -33,13 +35,17 @@ export class Fighter {
   /** Increments every time a move starts, so observers can tell moves apart. */
   moveSerial = 0;
   hasHit = false;
+  /** Out of lives: stays down instead of getting up. */
+  out = false;
+  /** Frames left in which this fighter can't be hit, after getting up. */
+  grace = 0;
 
   private walkFrames = 0;
   private behindFrames = 0;
   private timer = 0;
   private pushDir = 0;
   readonly sprite: Phaser.GameObjects.Sprite;
-  private readonly shadow: Phaser.GameObjects.Image;
+  readonly shadow: Phaser.GameObjects.Image;
 
   constructor(
     scene: Phaser.Scene,
@@ -59,6 +65,11 @@ export class Fighter {
 
   get down(): boolean {
     return this.mode === 'hit';
+  }
+
+  /** Can take a hit right now. */
+  get hittable(): boolean {
+    return !this.down && !this.out && this.grace === 0;
   }
 
   get body(): Body {
@@ -114,6 +125,7 @@ export class Fighter {
   }
 
   step(input: InputState, others: Fighter[]): void {
+    if (this.grace > 0) this.grace--;
     switch (this.mode) {
       case 'move':
         this.advanceMove();
@@ -123,6 +135,11 @@ export class Fighter {
         this.pose = this.timer < HIT_REEL ? 'hit' : this.timer < HIT_FALL ? 'falling' : 'down';
         if (this.timer < HIT_FALL) this.x += this.pushDir * 1.1;
         if (this.timer === HIT_FALL) sfx.thud();
+        if (this.timer >= HIT_FALL + DOWN_FRAMES && !this.out) {
+          this.mode = 'idle';
+          this.pose = 'stance';
+          this.grace = GRACE_FRAMES;
+        }
         break;
       case 'bow':
         this.pose = 'bow';
@@ -216,6 +233,7 @@ export class Fighter {
       .setFrame(this.pose)
       .setFlipX(this.facing < 0)
       .setDepth(10 + (this.mode === 'move' ? 2 : 0) + (this.isPlayer ? 1 : 0));
+    if (!this.out) this.sprite.setAlpha(this.grace > 0 && this.grace % 8 < 4 ? 0.4 : 1);
     const s = Math.max(0.5, 1 - this.air / 50);
     this.shadow.setPosition(Math.round(this.x), GROUND_Y).setScale(this.mode === 'hit' && this.pose === 'down' ? 1.6 : s, 1);
   }

@@ -10,9 +10,12 @@ export const GROUND_Y = 184;
 export const ARENA_MIN_X = 22;
 export const ARENA_MAX_X = 298;
 
-export const ROUND_SECONDS = 30;
-/** A round ends early once someone has this many half points (6 full points). */
-export const WIN_HALF_POINTS = 12;
+/** Knockdowns a fighter can take before they are out of the round. */
+export const LIVES = 3;
+/** Frames a knocked-down fighter stays on the ground before getting up. */
+export const DOWN_FRAMES = 50;
+/** Frames after getting up during which a fighter can't be hit. */
+export const GRACE_FRAMES = 45;
 
 export const WALK_FORWARD = 1.0;
 export const WALK_BACK = 0.8;

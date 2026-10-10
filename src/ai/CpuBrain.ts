@@ -61,7 +61,7 @@ export class CpuBrain {
       return NO_INPUT;
     }
 
-    if (--this.retarget <= 0 || !this.target || this.target.down) {
+    if (--this.retarget <= 0 || !this.target || !standing.includes(this.target)) {
       this.target = this.pickTarget(standing, leader);
       this.retarget = 40 + Math.floor(this.rng() * 40);
     }

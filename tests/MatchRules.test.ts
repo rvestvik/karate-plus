@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MatchRules, advanceCampaign, newCampaign, FIRST_PLACE_BONUS, POINTS_PER_HALF } from '../src/match/MatchRules';
-import { FPS, ROUND_SECONDS } from '../src/config';
+import { LIVES } from '../src/config';
 import { MAX_BELT } from '../src/art/palette';
 
 const entrants = () => [
@@ -10,33 +10,38 @@ const entrants = () => [
 ];
 
 describe('MatchRules', () => {
-  it('runs a 30 second clock', () => {
+  const knockOut = (m: MatchRules, id: 'white' | 'blue' | 'red') => {
+    for (let i = 0; i < LIVES; i++) m.knockDown(id);
+  };
+
+  it('costs a life per knockdown and puts a fighter out on the last one', () => {
     const m = new MatchRules(entrants());
-    expect(m.secondsLeft).toBe(ROUND_SECONDS);
-    for (let i = 0; i < ROUND_SECONDS * FPS - 1; i++) m.tick();
-    expect(m.isOver()).toBe(false);
-    m.tick();
-    expect(m.isOver()).toBe(true);
+    for (let i = 0; i < LIVES - 1; i++) expect(m.knockDown('blue')).toBe(false);
+    expect(m.get('blue').out).toBe(false);
+    expect(m.knockDown('blue')).toBe(true);
+    expect(m.get('blue').out).toBe(true);
+    expect(m.knockDown('blue')).toBe(false);
+    expect(m.get('blue').lives).toBe(0);
   });
 
-  it('ends early at six full points', () => {
+  it('only ends when one fighter is left standing', () => {
     const m = new MatchRules(entrants());
-    for (let i = 0; i < 5; i++) m.award('red', 2);
-    m.award('red', 1);
+    for (let i = 0; i < 50; i++) m.award('red', 2);
     expect(m.isOver()).toBe(false);
-    m.award('red', 1);
+    knockOut(m, 'blue');
+    expect(m.isOver()).toBe(false);
+    knockOut(m, 'white');
     expect(m.isOver()).toBe(true);
-    m.award('red', 2);
-    expect(m.get('red').halves).toBe(12);
+    expect(m.standings().map((c) => c.id)).toEqual(['red', 'white', 'blue']);
   });
 
-  it('ranks by score and eliminates last place', () => {
+  it('ranks by lives, then points', () => {
     const m = new MatchRules(entrants());
-    m.award('white', 2);
+    m.award('blue', 2);
     m.award('red', 1);
-    expect(m.ranking().map((c) => c.id)).toEqual(['white', 'red', 'blue']);
-    expect(m.loser().id).toBe('blue');
-    expect(m.leader()?.id).toBe('white');
+    m.knockDown('blue');
+    expect(m.ranking().map((c) => c.id)).toEqual(['red', 'white', 'blue']);
+    expect(m.leader()?.id).toBe('red');
   });
 
   it('breaks ties in favour of the player, then the higher belt', () => {
@@ -52,7 +57,7 @@ describe('campaign', () => {
     const m = new MatchRules(entrants());
     m.award('white', 2);
     m.award('red', 1);
-    const out = advanceCampaign(c, m.ranking());
+    const out = advanceCampaign(c, m.standings());
     expect(out.gameOver).toBe(false);
     expect(out.promoted).toBe(true);
     expect(out.eliminated).toBe('blue');

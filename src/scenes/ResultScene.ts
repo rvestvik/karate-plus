@@ -3,13 +3,14 @@ import { BG_KEY } from '../art/background';
 import { pixelText } from '../art/font';
 import { BELTS, LABEL } from '../art/palette';
 import { sfx } from '../audio/sfx';
+import { formatPoints } from '../match/Hud';
 import { advanceCampaign } from '../match/MatchRules';
 import { loadHiscore, onFire, saveHiscore } from './common';
 import type { ResultData } from './MatchScene';
 
 const PLACES = ['1ST', '2ND', '3RD'];
 
-/** Between rounds: standings, elimination, belt promotion or game over. */
+/** Between rounds: final standings, elimination, belt promotion or game over. */
 export class ResultScene extends Phaser.Scene {
   constructor() {
     super('result');
@@ -23,7 +24,7 @@ export class ResultScene extends Phaser.Scene {
     pixelText(this, 160, 14, `ROUND ${data.campaign.round} RESULT`, { scale: 2, align: 0.5, color: 0xffe070 });
     data.ranking.forEach((c, i) => {
       const y = 44 + i * 14;
-      const pts = (c.halves / 2).toString().replace('.5', ' 1/2');
+      const pts = formatPoints(c.halves);
       pixelText(this, 60, y, PLACES[i], { color: 0xc8c8c8 });
       pixelText(this, 96, y, c.id + (c.isPlayer ? ' (YOU)' : ''), { color: LABEL[c.id] });
       pixelText(this, 260, y, pts, { align: 1 });

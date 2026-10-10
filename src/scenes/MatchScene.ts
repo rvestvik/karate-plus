@@ -12,11 +12,13 @@ import { Hud } from '../match/Hud';
 import { MatchRules, POINTS_PER_HALF, type Campaign, type Competitor } from '../match/MatchRules';
 import { Referee } from '../match/Referee';
 
-type Phase = 'intro' | 'fight' | 'hitstop' | 'point' | 'end';
+type Phase = 'intro' | 'fight' | 'hitstop' | 'end';
 
 const INTRO_FRAMES = 80;
 const HITSTOP_FRAMES = 7;
-const POINT_FRAMES = 100;
+const CALL_FRAMES = 70;
+/** Frames between the last knockdown and the winner being called. */
+const LAST_FALL_FRAMES = 60;
 const END_FRAMES = 190;
 
 export interface MatchData {
@@ -110,28 +112,16 @@ export class MatchScene extends Phaser.Scene {
       case 'fight':
         this.stepFighters(true);
         this.resolveHits();
-        if (this.phase !== 'fight') break;
-        this.rules.tick();
         this.updateHud();
-        if (this.rules.isOver()) this.endRound();
+        if (this.phase === 'fight' && this.rules.isOver() && this.phaseFrame >= LAST_FALL_FRAMES) this.endRound();
         break;
       case 'hitstop':
-        if (this.phaseFrame >= HITSTOP_FRAMES) this.setPhase('point');
-        break;
-      case 'point':
-        this.stepFighters(false);
-        if (this.phaseFrame >= POINT_FRAMES) {
-          if (this.rules.isOver()) this.endRound();
-          else {
-            this.resetPositions();
-            this.setPhase('intro', 25);
-          }
-        }
+        if (this.phaseFrame >= HITSTOP_FRAMES) this.setPhase('fight');
         break;
       case 'end':
         this.stepFighters(false);
         if (this.phaseFrame >= END_FRAMES) {
-          const data: ResultData = { campaign: this.campaign, ranking: this.rules.ranking() };
+          const data: ResultData = { campaign: this.campaign, ranking: this.rules.standings() };
           this.scene.start('result', data);
         }
         break;
@@ -140,28 +130,24 @@ export class MatchScene extends Phaser.Scene {
 
   private stepFighters(live: boolean): void {
     const leader = this.rules.leader()?.id ?? null;
+    const opponents = (f: Fighter) => this.fighters.filter((o) => o !== f && !o.out);
     const inputs = this.fighters.map((f) => {
-      if (!live) return NO_INPUT;
+      if (!live || f.out) return NO_INPUT;
       if (f === this.player) return this.input1.read();
-      const others = this.fighters.filter((o) => o !== f);
-      return this.brains.get(f.id)!.think(others, leader);
+      return this.brains.get(f.id)!.think(opponents(f), leader);
     });
-    this.fighters.forEach((f, i) =>
-      f.step(
-        inputs[i],
-        this.fighters.filter((o) => o !== f),
-      ),
-    );
+    this.fighters.forEach((f, i) => f.step(inputs[i], opponents(f)));
   }
 
   /** Checks every active strike; at most one point is scored per frame. */
   private resolveHits(): void {
     const attackers = Phaser.Utils.Array.Shuffle([...this.fighters]);
     for (const a of attackers) {
+      if (a.out) continue;
       const effectors = a.activeEffectors;
       if (!effectors) continue;
       for (const d of this.fighters) {
-        if (d === a || d.down) continue;
+        if (d === a || !d.hittable) continue;
         const r = strike(a.body, effectors, d.body);
         if (!r) continue;
         a.hasHit = true;
@@ -178,6 +164,7 @@ export class MatchScene extends Phaser.Scene {
     }
   }
 
+  /** A scoring hit knocks the defender down and costs them a life; the fight carries on. */
   private scorePoint(a: Fighter, d: Fighter, r: StrikeResult): void {
     const full = r.halves === 2;
     this.rules.award(a.id, r.halves);
@@ -185,7 +172,14 @@ export class MatchScene extends Phaser.Scene {
     sfx.hit(full);
     this.spark(r);
     if (full) this.cameras.main.shake(140, 0.012);
-    this.referee.say(full ? 'FULL POINT!' : 'HALF POINT', POINT_FRAMES - 10, a.x);
+    if (this.rules.knockDown(d.id)) {
+      d.out = true;
+      this.brains.delete(d.id);
+      this.referee.say(`${d.id} IS OUT`, CALL_FRAMES + 30, d.x);
+      this.tweens.add({ targets: [d.sprite, d.shadow], alpha: 0, delay: 900, duration: 700 });
+    } else {
+      this.referee.say(full ? 'FULL POINT!' : 'HALF POINT', CALL_FRAMES, a.x);
+    }
     this.updateHud();
     this.setPhase('hitstop');
   }
@@ -200,17 +194,11 @@ export class MatchScene extends Phaser.Scene {
     this.hud.update(this.rules, this.campaign.totalScore + live);
   }
 
+  /** Only one fighter is left standing. */
   private endRound(): void {
-    const ranking = this.rules.ranking();
-    const winner = ranking[0];
-    const tied = ranking[1].halves === winner.halves;
-    for (const f of this.fighters) {
-      if (f.down) continue;
-      if (f.id === winner.id && !tied) f.celebrate();
-      else f.place(f.x, f.facing);
-    }
-    const winnerFighter = this.fighters.find((f) => f.id === winner.id)!;
-    this.referee.say(tied ? 'DRAW' : `${winner.id} WINS`, END_FRAMES, tied ? 'both' : winnerFighter.x);
+    const winner = this.fighters.find((f) => !f.out)!;
+    if (!winner.down) winner.celebrate();
+    this.referee.say(`${winner.id} WINS`, END_FRAMES, winner.x);
     sfx.gong();
     this.setPhase('end');
   }

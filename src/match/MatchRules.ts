@@ -1,4 +1,4 @@
-import { FPS, ROUND_SECONDS, WIN_HALF_POINTS, type FighterId } from '../config';
+import { LIVES, type FighterId } from '../config';
 import { MAX_BELT } from '../art/palette';
 
 export interface Competitor {
@@ -7,16 +7,23 @@ export interface Competitor {
   isPlayer: boolean;
   /** Score in half points. */
   halves: number;
+  /** Knockdowns left before this fighter is out. */
+  lives: number;
+  /** Out of lives and off the mat. */
+  out: boolean;
 }
 
-/** Scoring and timing for a single round. Pure logic, no rendering. */
+/**
+ * Scoring and lives for a single round. Every knockdown costs a life, and the
+ * round only ends when one fighter is left standing. Pure logic, no rendering.
+ */
 export class MatchRules {
   readonly competitors: Competitor[];
-  framesLeft: number;
+  /** Knocked-out competitors, first out first. */
+  readonly eliminated: Competitor[] = [];
 
-  constructor(entrants: Omit<Competitor, 'halves'>[], seconds = ROUND_SECONDS) {
-    this.competitors = entrants.map((e) => ({ ...e, halves: 0 }));
-    this.framesLeft = seconds * FPS;
+  constructor(entrants: Omit<Competitor, 'halves' | 'lives' | 'out'>[], lives = LIVES) {
+    this.competitors = entrants.map((e) => ({ ...e, halves: 0, lives, out: false }));
   }
 
   get(id: FighterId): Competitor {
@@ -25,42 +32,55 @@ export class MatchRules {
     return c;
   }
 
+  /** Competitors still in the round. */
+  get active(): Competitor[] {
+    return this.competitors.filter((c) => !c.out);
+  }
+
   award(id: FighterId, halves: 1 | 2): void {
+    this.get(id).halves += halves;
+  }
+
+  /** Takes a life. Returns true when that was the last one and the fighter is out. */
+  knockDown(id: FighterId): boolean {
     const c = this.get(id);
-    c.halves = Math.min(WIN_HALF_POINTS, c.halves + halves);
+    if (c.out) return false;
+    c.lives--;
+    if (c.lives > 0) return false;
+    c.out = true;
+    this.eliminated.push(c);
+    return true;
   }
 
-  tick(): void {
-    if (this.framesLeft > 0) this.framesLeft--;
-  }
-
-  get secondsLeft(): number {
-    return Math.ceil(this.framesLeft / FPS);
-  }
-
+  /** One fighter left standing: the round is done. */
   isOver(): boolean {
-    return this.framesLeft <= 0 || this.competitors.some((c) => c.halves >= WIN_HALF_POINTS);
+    return this.active.length <= 1;
   }
 
   /**
-   * Best first. Ties go to the player, then to the higher belt, so a CPU is
-   * never knocked out ahead of the player on a draw.
+   * Fighters still in, best first: most lives, then most points. Remaining
+   * ties go to the player, then to the higher belt.
    */
   ranking(): Competitor[] {
-    return [...this.competitors].sort(
-      (a, b) => b.halves - a.halves || Number(b.isPlayer) - Number(a.isPlayer) || b.belt - a.belt,
+    return this.active.sort(
+      (a, b) =>
+        b.lives - a.lives ||
+        b.halves - a.halves ||
+        Number(b.isPlayer) - Number(a.isPlayer) ||
+        b.belt - a.belt,
     );
   }
 
-  /** The unique leader, or null when the top is tied. */
+  /** The unique leader, or null when the top is tied on lives and points. */
   leader(): Competitor | null {
     const [a, b] = this.ranking();
-    return a.halves > b.halves ? a : null;
+    if (!a) return null;
+    return !b || a.lives > b.lives || (a.lives === b.lives && a.halves > b.halves) ? a : null;
   }
 
-  loser(): Competitor {
-    const r = this.ranking();
-    return r[r.length - 1];
+  /** Final order for the round: still standing first, then the knocked out, last out first. */
+  standings(): Competitor[] {
+    return [...this.ranking(), ...[...this.eliminated].reverse()];
   }
 }
 
@@ -101,9 +121,10 @@ export interface RoundOutcome {
 }
 
 /**
- * Applies a finished round: the last-placed fighter is eliminated. If that is
- * the player the game is over; otherwise a stronger CPU takes the empty spot
- * and the player is promoted one belt for winning the round outright.
+ * Applies a finished round, given the final standings (last one standing
+ * first). If the player was the first out the game is over; otherwise a
+ * stronger CPU takes that spot and the player is promoted one belt for being
+ * the last one standing.
  */
 export function advanceCampaign(c: Campaign, ranking: Competitor[]): RoundOutcome {
   const player = ranking.find((r) => r.isPlayer);
