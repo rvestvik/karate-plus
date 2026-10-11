@@ -18,7 +18,7 @@ describe('input', () => {
   });
 
   it('maps every move id to a defined move', () => {
-    const nonMoves: Command[] = ['idle', 'walkF', 'walkB', 'crouch', 'block'];
+    const nonMoves: Command[] = ['idle', 'walkF', 'walkB'];
     for (const table of Object.values(CONTROLS)) {
       for (const cmd of Object.values(table)) {
         if (!nonMoves.includes(cmd)) expect(MOVES).toHaveProperty(cmd);

@@ -12,7 +12,7 @@ export const NO_INPUT: InputState = { x: 0, y: 0, fire: false };
 /** Direction relative to where the fighter faces. */
 export type RelDir = 'none' | 'U' | 'UF' | 'F' | 'DF' | 'D' | 'DB' | 'B' | 'UB';
 
-export type Command = MoveId | 'idle' | 'walkF' | 'walkB' | 'crouch' | 'block';
+export type Command = MoveId | 'idle' | 'walkF' | 'walkB';
 
 export function toRelative(input: InputState, facing: 1 | -1): RelDir {
   const fx = input.x * facing; // +1 = forward
@@ -23,31 +23,32 @@ export function toRelative(input: InputState, facing: 1 | -1): RelDir {
 }
 
 /**
- * The control layout: 8 directions with and without fire, as in the
- * original. Change this table to remap moves.
+ * The control layout from the IK+ manual: 8 directions with and without
+ * fire. Walking back blocks when attacked from the front. Change this table
+ * to remap moves.
  */
 export const CONTROLS: Record<'plain' | 'fire', Record<RelDir, Command>> = {
   plain: {
     none: 'idle',
     U: 'jump',
-    UF: 'flyingKick',
+    UF: 'highPunch',
     F: 'walkF',
-    DF: 'frontKick',
-    D: 'crouch',
-    DB: 'sweep',
+    DF: 'lowKick',
+    D: 'sweep',
+    DB: 'crouchPunch',
     B: 'walkB',
-    UB: 'somersault',
+    UB: 'reversePunch',
   },
   fire: {
-    none: 'block',
-    U: 'highPunch',
-    UF: 'highKick',
-    F: 'midPunch',
-    DF: 'lowKick',
-    D: 'splits',
-    DB: 'backKick',
-    B: 'backRoundhouse',
-    UB: 'headbutt',
+    none: 'idle',
+    U: 'flyingKick',
+    UF: 'headbutt',
+    F: 'frontKick',
+    DF: 'highKick',
+    D: 'reverseSweep',
+    DB: 'backRoundhouse',
+    B: 'somersault',
+    UB: 'splits',
   },
 };
 

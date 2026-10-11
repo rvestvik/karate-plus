@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ATTACKS, MOVES, stepAt, totalFrames } from '../src/fighter/moves';
+import { ATTACKS, MOVES, moveTiming, stepAt, totalFrames } from '../src/fighter/moves';
 import { POSES } from '../src/art/poses';
 import { strike } from '../src/fighter/Hitbox';
 import { GROUND_Y } from '../src/config';
@@ -19,6 +19,11 @@ describe('moves', () => {
     expect(stepAt(m, 999).step.pose).toBe('fkickChamber');
   });
 
+  it('strikes must be held until they land, then can chain', () => {
+    expect(moveTiming(MOVES.frontKick)).toEqual({ windup: 7, recovery: 17 });
+    expect(moveTiming(MOVES.somersault).windup).toBe(0);
+  });
+
   it('classifies attack heights', () => {
     const h = Object.fromEntries(ATTACKS.map((a) => [a.move.id, a.height]));
     expect(h.highKick).toBe('high');
@@ -29,7 +34,8 @@ describe('moves', () => {
 
   it('back attacks strike behind', () => {
     const side = Object.fromEntries(ATTACKS.map((a) => [a.move.id, a.side]));
-    expect(side.backKick).toBe(-1);
+    expect(side.reversePunch).toBe(-1);
+    expect(side.reverseSweep).toBe(-1);
     expect(side.backRoundhouse).toBe(-1);
     expect(side.frontKick).toBe(1);
   });
@@ -69,9 +75,9 @@ describe('strike geometry', () => {
     expect(strike(at(100, 1, 'sweep'), ['ff'], airborne)).toBeNull();
   });
 
-  it('back kick hits an opponent behind', () => {
-    const info = ATTACKS.find((a) => a.move.id === 'backKick')!;
+  it('reverse sweep hits an opponent behind', () => {
+    const info = ATTACKS.find((a) => a.move.id === 'reverseSweep')!;
     const d = (info.range[0] + info.range[1]) / 2;
-    expect(strike(at(100, 1, 'backkick'), ['bf'], at(100 - d, 1, 'stance'))?.halves).toBe(2);
+    expect(strike(at(100, 1, 'revSweep'), ['bf'], at(100 - d, 1, 'stance'))?.halves).toBe(2);
   });
 });

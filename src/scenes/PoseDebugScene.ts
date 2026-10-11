@@ -58,7 +58,11 @@ export class PoseDebugScene extends Phaser.Scene {
       this.acc -= STEP_MS;
       this.player.step(this.input1.read(), [this.dummy]);
       if (this.dummy.down) this.dummy.place(this.dummy.x, this.dummy.facing);
-      this.dummy.step(this.dummyMode === 1 ? { x: 0, y: 1, fire: false } : this.dummyMode === 2 ? { x: 0, y: 0, fire: true } : NO_INPUT, [this.player]);
+      // Mode 1 holds back so the dummy blocks, mode 2 holds down-back to keep ducking.
+      const x = this.dummy.x;
+      const back = -this.dummy.facing as -1 | 1;
+      this.dummy.step(this.dummyMode === 1 ? { x: back, y: 0, fire: false } : this.dummyMode === 2 ? { x: back, y: 1, fire: false } : NO_INPUT, [this.player]);
+      if (this.dummyMode === 1) this.dummy.x = x;
       const eff = this.player.activeEffectors;
       if (eff) {
         const r = strike(this.player.body, eff, this.dummy.body);

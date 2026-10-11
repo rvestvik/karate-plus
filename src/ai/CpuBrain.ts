@@ -2,7 +2,7 @@ import type { FighterId } from '../config';
 import { MAX_BELT } from '../art/palette';
 import type { Fighter } from '../fighter/Fighter';
 import { inputFor, NO_INPUT, type Command, type InputState } from '../fighter/input';
-import { ATTACKS, totalFrames, type AttackInfo } from '../fighter/moves';
+import { ATTACKS, MOVES, moveTiming, totalFrames, type AttackInfo, type MoveId } from '../fighter/moves';
 
 /**
  * Drives a CPU fighter through the same virtual joystick as the player.
@@ -36,12 +36,21 @@ export class CpuBrain {
     return this.hold;
   }
 
+  /** Starts a move and holds the joystick until the strike lands. */
+  private strike(id: MoveId): InputState {
+    return this.press(id, moveTiming(MOVES[id]).windup + 1);
+  }
+
   private reactionDelay(): number {
     return Math.round(34 - 26 * this.skill + this.rng() * 14 * (1 - this.skill));
   }
 
   think(others: Fighter[], leader: FighterId | null): InputState {
     const me = this.me;
+    if (me.mode === 'move' && this.holdFrames > 0) {
+      this.holdFrames--;
+      return this.hold;
+    }
     if (!me.actionable) {
       this.holdFrames = 0;
       return NO_INPUT;
@@ -72,7 +81,7 @@ export class CpuBrain {
     const attack = this.chooseAttack(t, dist, side);
     if (attack) {
       this.cooldown = this.reactionDelay();
-      return this.press(attack.move.id, 2);
+      return this.strike(attack.move.id);
     }
 
     if (side < 0) {
@@ -108,8 +117,9 @@ export class CpuBrain {
       const remaining = totalFrames(o.move) - o.moveFrame;
       const facingThem = (o.x - me.x) * me.facing > 0;
       if (height === 'low') return this.press('jump', 2);
-      if (height === 'high') return this.press('crouch', remaining);
-      return facingThem ? this.press('block', remaining) : this.press('somersault', 2);
+      // Duck under high attacks with a counter punch; walking back blocks the rest.
+      if (height === 'high') return this.strike('crouchPunch');
+      return facingThem ? this.press('walkB', remaining) : this.press('somersault', 2);
     }
     return null;
   }
@@ -133,7 +143,7 @@ export class CpuBrain {
     const options = ATTACKS.filter((a) => {
       if (a.side !== side) return false;
       if (dist < a.range[0] - slop || dist > a.range[1] + slop) return false;
-      if (t.mode === 'crouch' && a.height === 'high') return false;
+      if (t.move?.id === 'crouchPunch' && a.height === 'high') return false;
       if (t.mode === 'block' && a.height !== 'low' && this.rng() < this.skill) return false;
       if (t.air > 6 && a.height === 'low') return false;
       return true;

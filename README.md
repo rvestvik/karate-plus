@@ -11,19 +11,20 @@ npm run build
 
 ## Controls
 
-Arrows/WASD to move, Space/J for fire, M to mute. Gamepads work too. Directions are relative to the way you face:
+Arrows/WASD to move, Space/J for fire, M to mute. Gamepads work too. The layout follows the original IK+ manual, with directions relative to the way you face:
 
 | Direction | Without fire | With fire |
 |---|---|---|
-| Up | Jump | High punch |
-| Up + forward | Flying kick | High kick |
-| Forward | Walk | Lunge punch |
-| Down + forward | Front kick | Low kick |
-| Down | Crouch | Splits kick |
-| Down + back | Foot sweep | Back kick |
-| Back | Walk back | Back roundhouse (turns you around) |
-| Up + back | Back somersault | Head butt |
-| — | — | Block (fire alone) |
+| Up | Jump | Flying leap kick |
+| Up + forward | Face punch | Head butt |
+| Forward | Walk | Stomach kick |
+| Down + forward | Shin kick | High face kick |
+| Down | Foot sweep | Reverse sweep (turns you around) |
+| Down + back | Crouching stomach punch | Back-step kick (turns you around) |
+| Back | Walk back, or block when attacked from the front | Back flip |
+| Up + back | Reverse punch (turns you around) | Double face kick |
+
+Hold the joystick until a strike lands: letting go sooner cancels it. Picking a new move as an attack finishes chains straight into it. Blocking stops head, chest and stomach attacks, but not shin kicks or sweeps.
 
 ## Rules
 

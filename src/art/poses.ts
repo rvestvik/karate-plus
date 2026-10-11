@@ -15,6 +15,7 @@ const BASE_POSES = {
   walk1: { torso: 8, fl: [30, 8], bl: [-15, -25], ...GUARD_ARMS },
   walk2: { torso: 8, fl: [6, -12], bl: [-32, -8], ...GUARD_ARMS },
   crouch: { torso: 30, fl: [82, 0], bl: [25, -95], fa: [70, 150], ba: [40, 120] },
+  crouchPunch: { torso: 34, fl: [82, 0], bl: [25, -95], fa: [92, 92], ba: [40, 120] },
   block: { torso: 2, fl: [20, -5], bl: [-25, -15], fa: [100, 172], ba: [20, 110] },
   jump: JUMP,
 
@@ -27,7 +28,6 @@ const BASE_POSES = {
   flykick: { torso: -20, fl: [95, 95], bl: [30, -80], fa: [60, 140], ba: [-30, 30] },
 
   punchChamber: { torso: 5, fl: [30, 0], bl: [-30, -20], fa: [40, 130], ba: [10, 100] },
-  punchMid: { torso: 18, fl: [40, 5], bl: [-40, -35], fa: [80, 84], ba: [15, 120] },
   punchHigh: { torso: 12, fl: [35, 5], bl: [-38, -30], fa: [114, 114], ba: [15, 120] },
   headbuttChamber: { torso: -15, fl: [20, -5], bl: [-25, -15], fa: [10, 30], ba: [-10, 20] },
   headbutt: { torso: 52, fl: [40, 5], bl: [-40, -35], fa: [-20, 10], ba: [-40, -10] },
@@ -37,8 +37,10 @@ const BASE_POSES = {
 
   splits: { torso: 0, fl: [90, 90], bl: [-90, -90], fa: [125, 115], ba: [-125, -115], hip: AIR_HIP },
 
-  backkickChamber: { torso: 30, fl: [5, -5], bl: [-60, 30], fa: [60, 140], ba: [20, 110] },
-  backkick: { torso: 50, fl: [10, -5], bl: [-95, -95], fa: [70, 140], ba: [30, 110] },
+  revPunchChamber: { torso: 5, fl: [22, -5], bl: [-22, -12], fa: [40, 110], ba: [70, 160] },
+  revPunch: { torso: -12, fl: [28, 0], bl: [-30, -20], fa: [50, 130], ba: [-104, -104] },
+  revSweepChamber: { torso: 30, fl: [75, -30], bl: [-40, -100], fa: [70, 30], ba: [50, 20] },
+  revSweep: { torso: 40, fl: [80, -40], bl: [-86, -88], fa: [70, 10], ba: [50, 0] },
   spinChamber: { torso: 10, fl: [0, -5], bl: [-75, 10], fa: [40, 100], ba: [-20, 60] },
   backRoundhouse: { torso: 35, fl: [8, 0], bl: [-128, -128], fa: [60, 120], ba: [10, 60] },
 

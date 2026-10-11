@@ -13,14 +13,16 @@ import {
 import { bakeFighter } from '../art/bakeFrames';
 import type { PoseName } from '../art/poses';
 import { sfx } from '../audio/sfx';
-import { commandFor, type InputState } from './input';
+import { commandFor, NO_INPUT, type Command, type InputState } from './input';
 import type { Body } from './Hitbox';
-import { MOVES, moveHeight, stepAt, totalFrames, type Effector, type Height, type MoveDef } from './moves';
+import { MOVES, moveHeight, moveTiming, stepAt, totalFrames, type Effector, type Height, type MoveDef } from './moves';
 
-export type Mode = 'idle' | 'walk' | 'crouch' | 'block' | 'move' | 'hit' | 'bow' | 'win';
+export type Mode = 'idle' | 'walk' | 'block' | 'move' | 'hit' | 'bow' | 'win';
 
 const HIT_REEL = 10;
 const HIT_FALL = 22;
+/** How close an attacker in front must be for walking back to become a block. */
+const BLOCK_RANGE = 44;
 
 /** One karateka: fixed-step state machine plus its sprite and shadow. */
 export class Fighter {
@@ -44,6 +46,10 @@ export class Fighter {
   private behindFrames = 0;
   private timer = 0;
   private pushDir = 0;
+  /** Last frame's joystick, so chaining needs a fresh selection. */
+  private lastInput: InputState = NO_INPUT;
+  /** Just turned around: the held stick now means something else, so wait for a fresh input. */
+  private turned = false;
   readonly sprite: Phaser.GameObjects.Sprite;
   readonly shadow: Phaser.GameObjects.Image;
 
@@ -60,7 +66,7 @@ export class Fighter {
 
   /** True when the fighter can take a new command. */
   get actionable(): boolean {
-    return this.mode === 'idle' || this.mode === 'walk' || this.mode === 'crouch' || this.mode === 'block';
+    return this.mode === 'idle' || this.mode === 'walk' || this.mode === 'block';
   }
 
   get down(): boolean {
@@ -128,7 +134,7 @@ export class Fighter {
     if (this.grace > 0) this.grace--;
     switch (this.mode) {
       case 'move':
-        this.advanceMove();
+        this.advanceMove(input);
         break;
       case 'hit':
         this.timer++;
@@ -149,38 +155,50 @@ export class Fighter {
         this.pose = 'win';
         break;
       default:
-        this.control(input, others);
+        if (this.turned && sameInput(input, this.lastInput)) {
+          this.control('idle', others);
+        } else {
+          this.turned = false;
+          this.control(commandFor(input, this.facing), others);
+        }
     }
+    this.lastInput = input;
     this.clamp();
   }
 
-  private control(input: InputState, others: Fighter[]): void {
-    const cmd = commandFor(input, this.facing);
+  private control(cmd: Command, others: Fighter[]): void {
     this.mode = 'idle';
     this.pose = 'stance';
     switch (cmd) {
       case 'idle':
         break;
-      case 'walkF':
       case 'walkB':
+        if (this.threatened(others)) {
+          this.mode = 'block';
+          this.pose = 'block';
+          break;
+        }
+      // falls through
+      case 'walkF':
         this.mode = 'walk';
         this.x += cmd === 'walkF' ? WALK_FORWARD * this.facing : -WALK_BACK * this.facing;
         this.walkFrames++;
         this.pose = Math.floor(this.walkFrames / 8) % 2 ? 'walk1' : 'walk2';
-        break;
-      case 'crouch':
-        this.mode = 'crouch';
-        this.pose = 'crouch';
-        break;
-      case 'block':
-        this.mode = 'block';
-        this.pose = 'block';
         break;
       default:
         this.startMove(MOVES[cmd]);
         return;
     }
     this.autoTurn(others);
+  }
+
+  /** An opponent in front, facing this way, is mid-attack at close range. */
+  private threatened(others: Fighter[]): boolean {
+    return others.some((o) => {
+      if (o.mode !== 'move' || !o.attackHeight) return false;
+      const dx = o.x - this.x;
+      return dx * this.facing > 0 && -dx * o.facing > 0 && Math.abs(dx) < BLOCK_RANGE;
+    });
   }
 
   /** Turns to face the action once every standing opponent is behind. */
@@ -200,26 +218,46 @@ export class Fighter {
     this.moveFrame = 0;
     this.moveSerial++;
     this.hasHit = false;
+    this.turned = false;
     this.pose = m.steps[0].pose;
   }
 
-  private advanceMove(): void {
+  private advanceMove(input: InputState): void {
     const m = this.move!;
     this.moveFrame++;
     const total = totalFrames(m);
-    if (this.moveFrame >= total) {
-      if (m.turn) this.facing = this.facing === 1 ? -1 : 1;
-      this.mode = 'idle';
-      this.move = null;
-      this.air = 0;
-      this.pose = 'stance';
+    const { windup, recovery } = moveTiming(m);
+    // Letting go of the joystick before the strike lands cancels it, though a turn still happens.
+    if (this.moveFrame >= total || (this.moveFrame < windup && commandFor(input, this.facing) !== m.id)) {
+      this.endMove();
       return;
+    }
+    // A fresh selection during recovery chains straight into the next move.
+    if (this.moveFrame >= recovery) {
+      const facing = m.turn ? (this.facing === 1 ? -1 : 1) : this.facing;
+      const cmd = commandFor(input, facing);
+      if (!sameInput(input, this.lastInput) && cmd in MOVES) {
+        this.endMove();
+        this.startMove(MOVES[cmd as keyof typeof MOVES]);
+        return;
+      }
     }
     const { step, start } = stepAt(m, this.moveFrame);
     if (step.active && this.moveFrame === start) sfx.whoosh();
     this.pose = step.pose;
     this.x += (m.dx ?? 0) * this.facing;
     this.air = m.air ? m.air * Math.sin((Math.PI * this.moveFrame) / total) : 0;
+  }
+
+  private endMove(): void {
+    if (this.move?.turn) {
+      this.facing = this.facing === 1 ? -1 : 1;
+      this.turned = true;
+    }
+    this.mode = 'idle';
+    this.move = null;
+    this.air = 0;
+    this.pose = 'stance';
   }
 
   private clamp(): void {
@@ -242,4 +280,8 @@ export class Fighter {
     this.sprite.destroy();
     this.shadow.destroy();
   }
+}
+
+function sameInput(a: InputState, b: InputState): boolean {
+  return a.x === b.x && a.y === b.y && a.fire === b.fire;
 }

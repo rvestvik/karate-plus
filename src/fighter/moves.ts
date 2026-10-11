@@ -18,12 +18,13 @@ export type MoveId =
   | 'somersault'
   | 'highPunch'
   | 'highKick'
-  | 'midPunch'
   | 'lowKick'
   | 'splits'
-  | 'backKick'
   | 'backRoundhouse'
-  | 'headbutt';
+  | 'headbutt'
+  | 'reversePunch'
+  | 'crouchPunch'
+  | 'reverseSweep';
 
 export type Height = 'high' | 'mid' | 'low';
 
@@ -43,7 +44,7 @@ export const MOVES: Record<MoveId, MoveDef> = {
   jump: { id: 'jump', name: 'JUMP', steps: [{ pose: 'jump', frames: 34 }], air: 30 },
   flyingKick: {
     id: 'flyingKick',
-    name: 'FLYING KICK',
+    name: 'FLYING LEAP KICK',
     steps: [
       { pose: 'jump', frames: 8 },
       { pose: 'flykick', frames: 14, active: ['ff'] },
@@ -54,7 +55,7 @@ export const MOVES: Record<MoveId, MoveDef> = {
   },
   frontKick: {
     id: 'frontKick',
-    name: 'FRONT KICK',
+    name: 'STOMACH KICK',
     steps: [
       { pose: 'fkickChamber', frames: 7 },
       { pose: 'fkick', frames: 10, active: ['ff'] },
@@ -72,14 +73,14 @@ export const MOVES: Record<MoveId, MoveDef> = {
   },
   somersault: {
     id: 'somersault',
-    name: 'BACK SOMERSAULT',
+    name: 'BACK FLIP',
     steps: Array.from({ length: SPIN_FRAMES }, (_, k) => ({ pose: `spin${k}` as PoseName, frames: 3 })),
     air: 30,
     dx: -2.2,
   },
   highPunch: {
     id: 'highPunch',
-    name: 'HIGH PUNCH',
+    name: 'FACE PUNCH',
     steps: [
       { pose: 'punchChamber', frames: 5 },
       { pose: 'punchHigh', frames: 9, active: ['fh'] },
@@ -88,26 +89,16 @@ export const MOVES: Record<MoveId, MoveDef> = {
   },
   highKick: {
     id: 'highKick',
-    name: 'HIGH KICK',
+    name: 'HIGH FACE KICK',
     steps: [
       { pose: 'hkickChamber', frames: 9 },
       { pose: 'hkick', frames: 10, active: ['ff'] },
       { pose: 'hkickChamber', frames: 9 },
     ],
   },
-  midPunch: {
-    id: 'midPunch',
-    name: 'LUNGE PUNCH',
-    steps: [
-      { pose: 'punchChamber', frames: 5 },
-      { pose: 'punchMid', frames: 9, active: ['fh'] },
-      { pose: 'punchChamber', frames: 7 },
-    ],
-    dx: 0.3,
-  },
   lowKick: {
     id: 'lowKick',
-    name: 'LOW KICK',
+    name: 'SHIN KICK',
     steps: [
       { pose: 'lkickChamber', frames: 6 },
       { pose: 'lkick', frames: 10, active: ['ff'] },
@@ -116,7 +107,7 @@ export const MOVES: Record<MoveId, MoveDef> = {
   },
   splits: {
     id: 'splits',
-    name: 'SPLITS KICK',
+    name: 'DOUBLE FACE KICK',
     steps: [
       { pose: 'jump', frames: 7 },
       { pose: 'splits', frames: 14, active: ['ff', 'bf'] },
@@ -124,18 +115,9 @@ export const MOVES: Record<MoveId, MoveDef> = {
     ],
     air: 10,
   },
-  backKick: {
-    id: 'backKick',
-    name: 'BACK KICK',
-    steps: [
-      { pose: 'backkickChamber', frames: 8 },
-      { pose: 'backkick', frames: 10, active: ['bf'] },
-      { pose: 'backkickChamber', frames: 8 },
-    ],
-  },
   backRoundhouse: {
     id: 'backRoundhouse',
-    name: 'BACK ROUNDHOUSE',
+    name: 'BACK-STEP KICK',
     steps: [
       { pose: 'spinChamber', frames: 8 },
       { pose: 'backRoundhouse', frames: 10, active: ['bf'] },
@@ -153,10 +135,58 @@ export const MOVES: Record<MoveId, MoveDef> = {
     ],
     dx: 0.4,
   },
+  reversePunch: {
+    id: 'reversePunch',
+    name: 'REVERSE PUNCH',
+    steps: [
+      { pose: 'revPunchChamber', frames: 6 },
+      { pose: 'revPunch', frames: 9, active: ['bh'] },
+      { pose: 'revPunchChamber', frames: 7 },
+    ],
+    turn: true,
+  },
+  crouchPunch: {
+    id: 'crouchPunch',
+    name: 'STOMACH PUNCH',
+    steps: [
+      { pose: 'crouch', frames: 5 },
+      { pose: 'crouchPunch', frames: 9, active: ['fh'] },
+      { pose: 'crouch', frames: 7 },
+    ],
+  },
+  reverseSweep: {
+    id: 'reverseSweep',
+    name: 'REVERSE SWEEP',
+    steps: [
+      { pose: 'revSweepChamber', frames: 8 },
+      { pose: 'revSweep', frames: 12, active: ['bf'] },
+      { pose: 'revSweepChamber', frames: 9 },
+    ],
+    turn: true,
+  },
 };
 
 export function totalFrames(m: MoveDef): number {
   return m.steps.reduce((n, s) => n + s.frames, 0);
+}
+
+/**
+ * A strike has to be held until it lands: before `windup` letting go cancels
+ * it. From `recovery` on, a fresh selection chains straight into a new move.
+ */
+export function moveTiming(m: MoveDef): { windup: number; recovery: number } {
+  let start = 0;
+  let windup = -1;
+  let recovery = -1;
+  for (const step of m.steps) {
+    if (step.active) {
+      if (windup < 0) windup = start;
+      recovery = start + step.frames;
+    }
+    start += step.frames;
+  }
+  // Jumps and flips can't be cancelled, and chain once they come down.
+  return windup < 0 ? { windup: 0, recovery: start - 6 } : { windup, recovery };
 }
 
 /** Returns the step active at frame `f` (0-based) and its starting frame. */
