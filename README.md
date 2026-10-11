@@ -3,10 +3,10 @@
 A browser tribute to *International Karate +* (1987), built with Phaser 3, TypeScript and Vite. All art and sound are generated in code.
 
 ```
-npm install
-npm run dev      # http://localhost:5173  (add ?poses for the pose/hitbox debug dojo)
-npm test         # rules, input mapping and hit geometry
-npm run build
+pnpm install
+pnpm dev          # http://localhost:5173  (add ?poses for the pose/hitbox debug dojo)
+pnpm test         # rules, input mapping and hit geometry
+pnpm build
 ```
 
 ## Controls

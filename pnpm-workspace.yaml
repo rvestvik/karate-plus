@@ -1,2 +1,4 @@
 allowBuilds:
-  esbuild: set this to true or false
+  # Vite bundles with esbuild, whose postinstall fetches the platform binary.
+  # Without this, `vite build` fails on any clean machine (CI included).
+  esbuild: true

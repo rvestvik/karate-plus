@@ -161,7 +161,7 @@ export interface BodyColors {
  * Rasterizes a pose into an RGBA buffer of size w x h with the origin at
  * (ox, oy). The result is crisp, outlined pixel art.
  */
-export function rasterize(p: Pose, colors: BodyColors, w: number, h: number, ox: number, oy: number): Uint8ClampedArray {
+export function rasterize(p: Pose, colors: BodyColors, w: number, h: number, ox: number, oy: number): Uint8ClampedArray<ArrayBuffer> {
   const j = computeJoints(p);
   const palette = [
     null,

@@ -1,0 +1,51 @@
+name: Build and deploy to Azure Static Web Apps - karate
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        # No version pinned here on purpose: the action reads `packageManager`
+        # from package.json, so CI tracks whatever the lockfile was written
+        # with. Only pnpm-lock.yaml is honoured here, so keep that field in
+        # step with the lockfile.
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: pnpm
+
+      - name: Install and build
+        # `pnpm build` is tsc --noEmit && vite build, so a type error fails the
+        # deploy rather than shipping.
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Deploy
+        # skip_app_build: the action's Oryx builder does not understand pnpm, so
+        # build above and hand it the finished dist/, which carries
+        # staticwebapp.config.json copied out of public/.
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: dist
+          skip_app_build: true
