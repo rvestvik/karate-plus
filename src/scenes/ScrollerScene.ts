@@ -28,6 +28,8 @@ const STANDOFF = 58;
 const EDGE = 12;
 /** Where the player sits on screen while the camera follows. */
 const FOLLOW_X = 130;
+/** Fastest the camera scrolls, in px per frame — quicker than a walk so it catches up after a wave without snapping. */
+const CAM_SPEED = 2.5;
 /** Standing enemies closer than this are nudged apart so they don't stack. */
 const PERSONAL_SPACE = 16;
 
@@ -221,7 +223,8 @@ export class ScrollerScene extends Phaser.Scene {
       }
     }
     const maxX = this.rules.level.length - WIDTH;
-    this.camX = Phaser.Math.Clamp(Math.max(this.camX, this.player.x - FOLLOW_X), 0, maxX);
+    const target = Phaser.Math.Clamp(this.player.x - FOLLOW_X, 0, maxX);
+    if (target > this.camX) this.camX = Math.min(target, this.camX + CAM_SPEED);
     const wave = this.rules.nextWave;
     if (wave && this.camX >= wave.atX) {
       this.camX = wave.atX;
