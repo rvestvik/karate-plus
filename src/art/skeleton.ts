@@ -20,6 +20,8 @@ export interface Pose {
   ba: [number, number];
   /** Extra clearance between the lowest body part and the ground. */
   lift?: number;
+  /** Fixed hip position for airborne poses, instead of resting on the ground. */
+  hip?: Pt;
 }
 
 export interface Pt {
@@ -69,7 +71,7 @@ function add(p: Pt, d: Pt, len: number): Pt {
 /**
  * Computes joint positions relative to the fighter origin (between the feet
  * on the ground), facing right. Positions are grounded automatically: the
- * lowest body part rests on y = 0 (minus `lift`).
+ * lowest body part rests on y = 0 (minus `lift`), unless `hip` pins the body.
  */
 export function computeJoints(p: Pose): Joints {
   const hip = { x: 0, y: 0 };
@@ -100,8 +102,9 @@ export function computeJoints(p: Pose): Joints {
     be.y + RADIUS.elbow,
     bh.y + RADIUS.hand,
   );
-  const dy = 0.5 - (p.lift ?? 0) - lowest;
-  const shift = (q: Pt): Pt => ({ x: q.x, y: q.y + dy });
+  const dx = p.hip ? p.hip.x : 0;
+  const dy = p.hip ? p.hip.y : 0.5 - (p.lift ?? 0) - lowest;
+  const shift = (q: Pt): Pt => ({ x: q.x + dx, y: q.y + dy });
   return {
     hip: shift(hip),
     neck: shift(neck),

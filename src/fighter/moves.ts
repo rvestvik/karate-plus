@@ -1,4 +1,4 @@
-import { jointsOf, hurtOf, type PoseName } from '../art/poses';
+import { jointsOf, hurtOf, SPIN_FRAMES, type PoseName } from '../art/poses';
 
 /** Body parts that can land a strike. */
 export type Effector = 'ff' | 'bf' | 'fh' | 'bh' | 'head';
@@ -73,11 +73,7 @@ export const MOVES: Record<MoveId, MoveDef> = {
   somersault: {
     id: 'somersault',
     name: 'BACK SOMERSAULT',
-    steps: [
-      { pose: 'tuck', frames: 9 },
-      { pose: 'inverted', frames: 12 },
-      { pose: 'tuck', frames: 9 },
-    ],
+    steps: Array.from({ length: SPIN_FRAMES }, (_, k) => ({ pose: `spin${k}` as PoseName, frames: 3 })),
     air: 30,
     dx: -2.2,
   },
@@ -126,7 +122,7 @@ export const MOVES: Record<MoveId, MoveDef> = {
       { pose: 'splits', frames: 14, active: ['ff', 'bf'] },
       { pose: 'jump', frames: 7 },
     ],
-    air: 20,
+    air: 10,
   },
   backKick: {
     id: 'backKick',
