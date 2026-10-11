@@ -4,9 +4,9 @@ import { BG_KEY } from '../art/background';
 import { sfx, toggleMute } from '../audio/sfx';
 import { CpuBrain } from '../ai/CpuBrain';
 import { Fighter } from '../fighter/Fighter';
-import { strike, type StrikeResult } from '../fighter/Hitbox';
+import { findHit } from '../fighter/combat';
+import type { StrikeResult } from '../fighter/Hitbox';
 import { NO_INPUT } from '../fighter/input';
-import { moveHeight } from '../fighter/moves';
 import { PlayerInput } from '../fighter/PlayerInput';
 import { Hud } from '../match/Hud';
 import { MatchRules, POINTS_PER_HALF, type Campaign, type Competitor } from '../match/MatchRules';
@@ -141,27 +141,12 @@ export class MatchScene extends Phaser.Scene {
 
   /** Checks every active strike; at most one point is scored per frame. */
   private resolveHits(): void {
-    const attackers = Phaser.Utils.Array.Shuffle([...this.fighters]);
-    for (const a of attackers) {
-      if (a.out) continue;
-      const effectors = a.activeEffectors;
-      if (!effectors) continue;
-      for (const d of this.fighters) {
-        if (d === a || !d.hittable) continue;
-        const r = strike(a.body, effectors, d.body);
-        if (!r) continue;
-        a.hasHit = true;
-        const fromFront = (a.x - d.x) * d.facing > 0;
-        if (d.mode === 'block' && fromFront && moveHeight(a.move!) !== 'low') {
-          sfx.block();
-          this.spark(r);
-          d.knockBack(3);
-          break;
-        }
-        this.scorePoint(a, d, r);
-        return;
-      }
-    }
+    const hit = findHit(this.fighters, ({ d, r }) => {
+      sfx.block();
+      this.spark(r);
+      d.knockBack(3);
+    });
+    if (hit) this.scorePoint(hit.a, hit.d, hit.r);
   }
 
   /** A scoring hit knocks the defender down and costs them a life; the fight carries on. */

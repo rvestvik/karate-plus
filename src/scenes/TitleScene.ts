@@ -6,7 +6,11 @@ import { pixelText } from '../art/font';
 import type { PoseName } from '../art/poses';
 import { sfx, toggleMute } from '../audio/sfx';
 import { newCampaign } from '../match/MatchRules';
+import { NEW_SCROLLER_RUN } from './ScrollerScene';
 import { loadHiscore, onFire } from './common';
+
+const MODES = ['TOURNAMENT', 'SCROLLER'] as const;
+let lastMode = 0;
 
 const DEMO: PoseName[][] = [
   ['stance', 'fkickChamber', 'fkick', 'fkickChamber'],
@@ -35,8 +39,33 @@ export class TitleScene extends Phaser.Scene {
     ];
     help.forEach((l, i) => pixelText(this, 160, 92 + i * 10, l, { align: 0.5, color: 0xc8c8c8 }));
 
-    const blink = pixelText(this, 160, 136, 'PRESS FIRE TO BEGIN', { align: 0.5, color: 0xffffff });
-    this.time.addEvent({ delay: 450, loop: true, callback: () => blink.setVisible(!blink.visible) });
+    let mode = lastMode;
+    const lines = MODES.map((m, i) => pixelText(this, 160, 134 + i * 12, m, { align: 0.5 }));
+    const cursor = pixelText(this, 0, 0, '>', { color: 0xffe070 });
+    let blinkOn = true;
+    const draw = () => {
+      lines.forEach((l, i) => {
+        l.setColor(i === mode ? 0xffe070 : 0x9090a0);
+        l.setVisible(i !== mode || blinkOn);
+      });
+      cursor.setPosition(160 - MODES[mode].length * 3 - 10, 134 + mode * 12);
+    };
+    const choose = (d: number) => {
+      mode = (mode + d + MODES.length) % MODES.length;
+      lastMode = mode;
+      blinkOn = true;
+      sfx.select();
+      draw();
+    };
+    this.time.addEvent({ delay: 450, loop: true, callback: () => ((blinkOn = !blinkOn), draw()) });
+    const kb = this.input.keyboard!;
+    ['keydown-UP', 'keydown-W'].forEach((e) => kb.on(e, () => choose(-1)));
+    ['keydown-DOWN', 'keydown-S'].forEach((e) => kb.on(e, () => choose(1)));
+    this.input.gamepad?.on('down', (_pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+      if (button.index === 12) choose(-1);
+      if (button.index === 13) choose(1);
+    });
+    draw();
     pixelText(this, 314, 191, 'M MUTE  P POSES', { align: 1, color: 0x9090a0 });
 
     const ids = ['white', 'blue', 'red'] as const;
@@ -64,7 +93,8 @@ export class TitleScene extends Phaser.Scene {
     this.input.keyboard!.once('keydown-P', () => this.scene.start('poses'));
     onFire(this, () => {
       sfx.select();
-      this.scene.start('match', { campaign: newCampaign() });
+      if (MODES[mode] === 'SCROLLER') this.scene.start('scroller', { ...NEW_SCROLLER_RUN });
+      else this.scene.start('match', { campaign: newCampaign() });
     });
   }
 }

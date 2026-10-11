@@ -11,7 +11,7 @@ pnpm build
 
 ## Controls
 
-Arrows/WASD to move, Space/J for fire, M to mute. Gamepads work too. The layout follows the original IK+ manual, with directions relative to the way you face:
+Up/down on the title screen picks a mode: **Tournament** or **Scroller**. Arrows/WASD to move, Space/J for fire, M to mute. Gamepads work too. The layout follows the original IK+ manual, with directions relative to the way you face:
 
 | Direction | Without fire | With fire |
 |---|---|---|
@@ -31,3 +31,7 @@ Hold the joystick until a strike lands: letting go sooner cancels it. Picking a 
 Three fighters enter each round, and it goes on until only one is left standing. Each fighter has 3 lives. Any scoring strike knocks the other fighter down and costs them a life. They get back up after a moment, briefly protected while they flicker, and the fight carries on without stopping. A fighter who loses their last life stays down and is out.
 
 A strike that lands with the tip of the limb at the right range is a full point, while a jammed or glancing strike is a half point. Points count towards your score. Be the last one standing to earn the next belt. The opponents get tougher every round: the first CPU out is replaced by a stronger challenger, and the one who survives moves up a belt. If you're the first one out, the game is over.
+
+## Scroller
+
+A side-scrolling beat-'em-up across four stages: the beach, the harbour, the temple and the mountain. Walk right until the screen locks, then beat the wave of karatekas that walks on from either side. Only two attack at once, while the rest wait their turn. Each stage ends with a boss. You have a health bar and 3 lives. Half points stagger and full points knock down, both for you and for them. Health left at the end of a stage is paid out as a bonus. Esc goes back to the title.

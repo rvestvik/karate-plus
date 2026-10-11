@@ -11,6 +11,7 @@ import {
   type FighterId,
 } from '../config';
 import { bakeFighter } from '../art/bakeFrames';
+import type { GiColor } from '../art/palette';
 import type { PoseName } from '../art/poses';
 import { sfx } from '../audio/sfx';
 import { commandFor, NO_INPUT, type Command, type InputState } from './input';
@@ -41,11 +42,21 @@ export class Fighter {
   out = false;
   /** Frames left in which this fighter can't be hit, after getting up. */
   grace = 0;
+  /** How far this fighter can walk; the scroller moves these with the camera. */
+  minX = ARENA_MIN_X;
+  maxX = ARENA_MAX_X;
+  /** Frames spent on the ground after a knockdown. */
+  downFrames = DOWN_FRAMES;
+  /** Invulnerable frames after getting up from a knockdown, and after a stagger. */
+  graceFrames = GRACE_FRAMES;
+  staggerGrace = 0;
 
   private walkFrames = 0;
   private behindFrames = 0;
   private timer = 0;
   private pushDir = 0;
+  /** Reeling from a light hit: back on their feet without falling. */
+  private staggered = false;
   /** Last frame's joystick, so chaining needs a fresh selection. */
   private lastInput: InputState = NO_INPUT;
   /** Just turned around: the held stick now means something else, so wait for a fresh input. */
@@ -58,8 +69,9 @@ export class Fighter {
     readonly id: FighterId,
     public belt: number,
     readonly isPlayer: boolean,
+    gi: GiColor = id,
   ) {
-    const key = bakeFighter(scene, id, belt);
+    const key = bakeFighter(scene, gi, belt);
     this.shadow = scene.add.image(0, GROUND_Y, 'shadow').setDepth(5);
     this.sprite = scene.add.sprite(0, GROUND_Y, key, 'stance').setOrigin(0.5, 56 / 60);
   }
@@ -115,9 +127,11 @@ export class Fighter {
     this.air = 0;
   }
 
-  takeHit(fromX: number): void {
+  /** Knocked down, or with `knockdown` false only staggered back a step. */
+  takeHit(fromX: number, knockdown = true): void {
     this.facing = fromX >= this.x ? 1 : -1;
     this.pushDir = -this.facing;
+    this.staggered = !knockdown;
     this.mode = 'hit';
     this.move = null;
     this.air = 0;
@@ -138,13 +152,23 @@ export class Fighter {
         break;
       case 'hit':
         this.timer++;
+        if (this.staggered) {
+          this.pose = 'hit';
+          this.x += this.pushDir * 1.1;
+          if (this.timer >= HIT_REEL) {
+            this.mode = 'idle';
+            this.pose = 'stance';
+            this.grace = this.staggerGrace;
+          }
+          break;
+        }
         this.pose = this.timer < HIT_REEL ? 'hit' : this.timer < HIT_FALL ? 'falling' : 'down';
         if (this.timer < HIT_FALL) this.x += this.pushDir * 1.1;
         if (this.timer === HIT_FALL) sfx.thud();
-        if (this.timer >= HIT_FALL + DOWN_FRAMES && !this.out) {
+        if (this.timer >= HIT_FALL + this.downFrames && !this.out) {
           this.mode = 'idle';
           this.pose = 'stance';
-          this.grace = GRACE_FRAMES;
+          this.grace = this.graceFrames;
         }
         break;
       case 'bow':
@@ -261,7 +285,7 @@ export class Fighter {
   }
 
   private clamp(): void {
-    this.x = Phaser.Math.Clamp(this.x, ARENA_MIN_X, ARENA_MAX_X);
+    this.x = Phaser.Math.Clamp(this.x, this.minX, this.maxX);
   }
 
   /** Copies the logical state onto the sprite. */

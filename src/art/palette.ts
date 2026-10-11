@@ -3,13 +3,18 @@ export interface Shades {
   shade: string;
 }
 
-export type GiColor = 'white' | 'red' | 'blue' | 'ref';
+export type GiColor = 'white' | 'red' | 'blue' | 'ref' | 'black' | 'green' | 'yellow' | 'purple';
 
 export const GI: Record<GiColor, Shades> = {
   white: { base: '#eeeeea', shade: '#a2a6b8' },
   red: { base: '#d8402c', shade: '#8a2218' },
   blue: { base: '#3c5edc', shade: '#22348e' },
   ref: { base: '#e4dcc4', shade: '#6a6458' },
+  // Scroller enemies.
+  black: { base: '#3a3a42', shade: '#1e1e24' },
+  green: { base: '#3c9a48', shade: '#1e5a28' },
+  yellow: { base: '#e4c030', shade: '#8a6e14' },
+  purple: { base: '#8a46c0', shade: '#4a2270' },
 };
 
 export const SKIN: Shades = { base: '#eaa878', shade: '#b07650' };

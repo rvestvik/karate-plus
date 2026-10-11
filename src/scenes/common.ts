@@ -19,7 +19,7 @@ export function saveHiscore(score: number): void {
   }
 }
 
-/** Calls `fn` once on Space, J, Enter, a pointer press or a gamepad button. */
+/** Calls `fn` once on Space, J, Enter, a pointer press or a gamepad (non d-pad) button. */
 export function onFire(scene: Phaser.Scene, fn: () => void): void {
   let done = false;
   const go = () => {
@@ -31,5 +31,8 @@ export function onFire(scene: Phaser.Scene, fn: () => void): void {
   const kb = scene.input.keyboard!;
   ['keydown-SPACE', 'keydown-J', 'keydown-ENTER'].forEach((e) => kb.once(e, go));
   scene.input.once('pointerdown', go);
-  scene.input.gamepad?.once('down', go);
+  // The d-pad (buttons 12-15) is for menus, not fire.
+  scene.input.gamepad?.on('down', (_pad: Phaser.Input.Gamepad.Gamepad, button: Phaser.Input.Gamepad.Button) => {
+    if (button.index < 12 || button.index > 15) go();
+  });
 }

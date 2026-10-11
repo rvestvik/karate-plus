@@ -8,7 +8,7 @@ export const BG_KEY = 'background';
 const HORIZON = 98;
 const SHORE = 142;
 
-function rng(seed: number) {
+export function rng(seed: number) {
   return () => {
     seed = (seed * 1664525 + 1013904223) >>> 0;
     return seed / 2 ** 32;

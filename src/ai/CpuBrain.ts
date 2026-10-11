@@ -17,6 +17,8 @@ export class CpuBrain {
   private retarget = 0;
   private skill = 0;
   private readonly reacted = new Map<FighterId, number>();
+  /** When set, hang back at about this distance and don't attack (waiting a turn in a crowd). */
+  standoff: number | null = null;
 
   constructor(
     private readonly me: Fighter,
@@ -78,6 +80,8 @@ export class CpuBrain {
     const dist = Math.abs(t.x - me.x);
     const side: 1 | -1 = (t.x - me.x) * me.facing >= 0 ? 1 : -1;
 
+    if (this.standoff !== null) return this.hangBack(dist, side, this.standoff);
+
     const attack = this.chooseAttack(t, dist, side);
     if (attack) {
       this.cooldown = this.reactionDelay();
@@ -97,6 +101,14 @@ export class CpuBrain {
     // In range but no clean shot: feint or pause briefly.
     if (this.rng() < 0.3) return this.press(this.rng() < 0.5 ? 'walkF' : 'walkB', 4);
     this.cooldown = 4;
+    return NO_INPUT;
+  }
+
+  private hangBack(dist: number, side: 1 | -1, standoff: number): InputState {
+    if (side < 0) return NO_INPUT;
+    if (dist > standoff + 8) return this.press('walkF', 6 + Math.floor(this.rng() * 8));
+    if (dist < standoff - 8) return this.press('walkB', 6);
+    this.cooldown = 6 + Math.floor(this.rng() * 10);
     return NO_INPUT;
   }
 
