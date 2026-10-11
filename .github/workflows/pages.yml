@@ -1,0 +1,54 @@
+name: Build and deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        # Reads `packageManager` from package.json, same as deploy.yml.
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: pnpm
+
+      - name: Install and build
+        # vite.config.ts uses base './', so dist/ works under /karate-plus/.
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
