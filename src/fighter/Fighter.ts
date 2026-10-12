@@ -12,7 +12,7 @@ import {
 } from '../config';
 import { bakeFighter } from '../art/bakeFrames';
 import type { GiColor } from '../art/palette';
-import type { PoseName } from '../art/poses';
+import { WALK_FRAMES, type PoseName } from '../art/poses';
 import { sfx } from '../audio/sfx';
 import { commandFor, NO_INPUT, type Command, type InputState } from './input';
 import type { Body } from './Hitbox';
@@ -50,8 +50,12 @@ export class Fighter {
   /** Invulnerable frames after getting up from a knockdown, and after a stagger. */
   graceFrames = GRACE_FRAMES;
   staggerGrace = 0;
+  /** Walk speed multiplier (scroller enemy kinds). */
+  speedScale = 1;
 
-  private walkFrames = 0;
+  /** Where the walk cycle's frame 0 sits, in rounded pixels along `walkFacing`. */
+  private walkAnchor = 0;
+  private walkFacing = 0;
   private behindFrames = 0;
   private timer = 0;
   private pushDir = 0;
@@ -188,9 +192,15 @@ export class Fighter {
     }
     this.lastInput = input;
     this.clamp();
+    if (this.mode === 'walk') {
+      // The cycle follows the drawn position, so planted feet never slide.
+      const d = Math.round(this.x) * this.walkFacing - this.walkAnchor;
+      this.pose = `walk${((d % WALK_FRAMES) + WALK_FRAMES) % WALK_FRAMES}`;
+    }
   }
 
   private control(cmd: Command, others: Fighter[]): void {
+    const wasWalking = this.mode === 'walk';
     this.mode = 'idle';
     this.pose = 'stance';
     switch (cmd) {
@@ -205,9 +215,13 @@ export class Fighter {
       // falls through
       case 'walkF':
         this.mode = 'walk';
-        this.x += cmd === 'walkF' ? WALK_FORWARD * this.facing : -WALK_BACK * this.facing;
-        this.walkFrames++;
-        this.pose = Math.floor(this.walkFrames / 8) % 2 ? 'walk1' : 'walk2';
+        if (!wasWalking || this.walkFacing !== this.facing) {
+          // Lead with the front foot going forward, the back foot going back.
+          const start = Math.round(cmd === 'walkF' ? WALK_FRAMES / 4 : (3 * WALK_FRAMES) / 4);
+          this.walkFacing = this.facing;
+          this.walkAnchor = Math.round(this.x) * this.facing - start;
+        }
+        this.x += (cmd === 'walkF' ? WALK_FORWARD : -WALK_BACK) * this.speedScale * this.facing;
         break;
       default:
         this.startMove(MOVES[cmd]);

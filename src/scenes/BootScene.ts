@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { createBackground } from '../art/background';
 import { bakeFighter } from '../art/bakeFrames';
 import { createFont } from '../art/font';
+import { createProps } from '../art/props';
 
 /** Generates every texture in code, then moves on to the title screen. */
 export class BootScene extends Phaser.Scene {
@@ -13,6 +14,7 @@ export class BootScene extends Phaser.Scene {
     createFont(this);
     createBackground(this);
     this.createIcons();
+    createProps(this);
     bakeFighter(this, 'white', 0);
     bakeFighter(this, 'blue', 0);
     bakeFighter(this, 'red', 1);

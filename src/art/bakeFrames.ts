@@ -8,14 +8,17 @@ export function fighterKey(gi: GiColor, belt: number | null): string {
   return `fighter_${gi}_${belt ?? 'none'}`;
 }
 
+/** Frames per row of the baked sheet, keeping it well inside GPU texture limits. */
+const SHEET_COLS = 16;
+
 /**
- * Renders every pose for one gi/belt combination into a strip texture whose
+ * Renders every pose for one gi/belt combination into a sheet texture whose
  * frames are named after the poses. Results are cached in the texture manager.
  */
 export function bakeFighter(scene: Phaser.Scene, gi: GiColor, belt: number | null): string {
   const key = fighterKey(gi, belt);
   if (scene.textures.exists(key)) return key;
-  const tex = scene.textures.createCanvas(key, FRAME_W * POSE_NAMES.length, FRAME_H);
+  const tex = scene.textures.createCanvas(key, FRAME_W * SHEET_COLS, FRAME_H * Math.ceil(POSE_NAMES.length / SHEET_COLS));
   if (!tex) throw new Error(`could not create texture ${key}`);
   const ctx = tex.getContext();
   const colors = {
@@ -29,8 +32,10 @@ export function bakeFighter(scene: Phaser.Scene, gi: GiColor, belt: number | nul
   };
   POSE_NAMES.forEach((name, i) => {
     const rgba = rasterize(POSES[name] as Pose, colors, FRAME_W, FRAME_H, ORIGIN_X, ORIGIN_Y);
-    ctx.putImageData(new ImageData(rgba, FRAME_W, FRAME_H), i * FRAME_W, 0);
-    tex.add(name, 0, i * FRAME_W, 0, FRAME_W, FRAME_H);
+    const x = (i % SHEET_COLS) * FRAME_W;
+    const y = Math.floor(i / SHEET_COLS) * FRAME_H;
+    ctx.putImageData(new ImageData(rgba, FRAME_W, FRAME_H), x, y);
+    tex.add(name, 0, x, y, FRAME_W, FRAME_H);
   });
   tex.refresh();
   return key;

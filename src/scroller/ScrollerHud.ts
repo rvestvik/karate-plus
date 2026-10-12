@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { WIDTH } from '../config';
 import { pixelText, type PixelText } from '../art/font';
 import { BELTS } from '../art/palette';
-import { PLAYER_HP, START_LIVES, type ScrollerRules } from './ScrollerRules';
+import { MAX_LIVES, PLAYER_HP, START_LIVES, type ScrollerRules } from './ScrollerRules';
 
 const BAR_W = 100;
 
@@ -36,7 +36,7 @@ export class ScrollerHud {
     fixed(scene.add.rectangle(27, 4, 14, 6, 0x101010).setOrigin(0).setDepth(50));
     fixed(scene.add.rectangle(28, 5, 12, 4, beltColor).setOrigin(0).setDepth(50));
     this.hpFill = bar(6, 0x50d050);
-    for (let i = 0; i < START_LIVES; i++) this.lives.push(fixed(scene.add.image(50 + i * 11, 7, 'yy_full').setDepth(50)));
+    for (let i = 0; i < MAX_LIVES; i++) this.lives.push(fixed(scene.add.image(50 + i * 11, 7, 'yy_full').setDepth(50)));
 
     const bossLabel = text(WIDTH - 6, 3, 'BOSS', { align: 1, color: 0xff6a50 });
     const bossBack = fixed(scene.add.rectangle(WIDTH - 8 - BAR_W, 12, BAR_W + 2, 6, 0x101010).setOrigin(0).setDepth(50));
@@ -55,7 +55,9 @@ export class ScrollerHud {
     const hp = rules.hp / PLAYER_HP;
     this.hpFill.setSize(Math.round(BAR_W * hp), 4);
     this.hpFill.fillColor = hp > 0.5 ? 0x50d050 : hp > 0.25 ? 0xf0c030 : 0xe04030;
-    this.lives.forEach((img, i) => img.setTexture(i < rules.lives ? 'yy_full' : 'yy_empty'));
+    this.lives.forEach((img, i) =>
+      img.setTexture(i < rules.lives ? 'yy_full' : 'yy_empty').setVisible(i < Math.max(START_LIVES, rules.lives)),
+    );
     this.score.setText(String(rules.score).padStart(6, '0'));
     const boss = rules.boss;
     this.boss.forEach((o) => o.setVisible(!!boss));

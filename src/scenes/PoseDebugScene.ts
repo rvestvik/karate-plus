@@ -33,7 +33,9 @@ export class PoseDebugScene extends Phaser.Scene {
   create(): void {
     this.add.image(0, 0, BG_KEY).setOrigin(0).setAlpha(0.5);
     const cols = 12;
-    POSE_NAMES.forEach((name, i) => {
+    // Every third walk frame is enough to see the cycle.
+    const shown = POSE_NAMES.filter((n) => !/^walk\d+$/.test(n) || Number(n.slice(4)) % 3 === 0);
+    shown.forEach((name, i) => {
       const x = 14 + (i % cols) * 26;
       const y = 32 + Math.floor(i / cols) * 34;
       this.add.image(x, y, fighterKey('white', 0), name).setScale(0.5).setOrigin(0.5, 56 / 60);

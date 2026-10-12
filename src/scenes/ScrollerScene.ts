@@ -1,18 +1,21 @@
 import Phaser from 'phaser';
-import { HEIGHT, STEP_MS, WIDTH } from '../config';
+import { GROUND_Y, HEIGHT, STEP_MS, WIDTH } from '../config';
 import { pixelText } from '../art/font';
 import { MAX_BELT } from '../art/palette';
 import { createScrollBackground, LAYERS, layerKey } from '../art/scrollBackground';
 import { sfx, toggleMute } from '../audio/sfx';
+import { ARCHETYPES } from '../ai/archetypes';
 import { CpuBrain } from '../ai/CpuBrain';
 import { findHit } from '../fighter/combat';
 import { Fighter } from '../fighter/Fighter';
-import type { StrikeResult } from '../fighter/Hitbox';
+import { overlaps, strikeBox, worldHurt, type StrikeResult } from '../fighter/Hitbox';
 import { NO_INPUT } from '../fighter/input';
 import { PlayerInput } from '../fighter/PlayerInput';
-import { LEVELS } from '../scroller/levels';
+import type { Rect } from '../art/skeleton';
+import { HazardField, type HazardObj } from '../scroller/hazards';
+import { LEVELS, type PickupKind, type PropDef } from '../scroller/levels';
 import { ScrollerHud } from '../scroller/ScrollerHud';
-import { ScrollerRules, START_LIVES } from '../scroller/ScrollerRules';
+import { CRAB_POINTS, DROP_CHANCE, ScrollerRules, START_LIVES } from '../scroller/ScrollerRules';
 import { loadHiscore, saveHiscore } from './common';
 
 type Phase = 'intro' | 'play' | 'hitstop' | 'clear' | 'won' | 'gameover';
@@ -32,6 +35,16 @@ const FOLLOW_X = 130;
 const CAM_SPEED = 2.5;
 /** Standing enemies closer than this are nudged apart so they don't stack. */
 const PERSONAL_SPACE = 16;
+/** Points for smashing a breakable. */
+const SMASH_POINTS = 50;
+/** Frames a pickup lies around before vanishing; it blinks for the last two seconds. */
+const PICKUP_LIFE = 480;
+const PICKUP_REACH = 10;
+const PROP_REACH = 36;
+const CRAB_KICK_REACH = 12;
+const REGULAR_DROPS: PickupKind[] = ['rice', 'rice', 'coin', 'scroll'];
+/** Half points each hazard deals. */
+const HAZARD_DAMAGE: Record<HazardObj['kind'], 1 | 2> = { crab: 1, tile: 1, hook: 2, boulder: 2 };
 
 export interface ScrollerData {
   level: number;
@@ -49,6 +62,21 @@ interface Foe {
   onScreen: boolean;
 }
 
+interface Prop {
+  def: PropDef;
+  sprite: Phaser.GameObjects.Image;
+  broken: boolean;
+}
+
+interface Pickup {
+  kind: PickupKind;
+  x: number;
+  y: number;
+  vy: number;
+  age: number;
+  sprite: Phaser.GameObjects.Image;
+}
+
 /** Side-scrolling mode: walk right, beat each wave, then the boss. */
 export class ScrollerScene extends Phaser.Scene {
   private run!: ScrollerData;
@@ -57,6 +85,11 @@ export class ScrollerScene extends Phaser.Scene {
   private player!: Fighter;
   private input1!: PlayerInput;
   private foes: Foe[] = [];
+  private props: Prop[] = [];
+  private pickups: Pickup[] = [];
+  private hazards!: HazardField;
+  private hazardSprites = new Map<number, Phaser.GameObjects.Image>();
+  private hazardGfx!: Phaser.GameObjects.Graphics;
   private layers: { sprite: Phaser.GameObjects.TileSprite; factor: number }[] = [];
   private bars!: Phaser.GameObjects.Graphics;
   private camX = 0;
@@ -73,6 +106,9 @@ export class ScrollerScene extends Phaser.Scene {
   init(data: ScrollerData): void {
     this.run = data;
     this.foes = [];
+    this.props = [];
+    this.pickups = [];
+    this.hazardSprites = new Map();
     this.layers = [];
     this.camX = 0;
     this.locked = false;
@@ -83,11 +119,23 @@ export class ScrollerScene extends Phaser.Scene {
   create(): void {
     const level = LEVELS[this.run.level];
     createScrollBackground(this, level.theme);
-    this.layers = LAYERS.map(({ layer, factor }, i) => ({
-      sprite: this.add.tileSprite(0, 0, WIDTH, HEIGHT, layerKey(level.theme, layer)).setOrigin(0).setScrollFactor(0).setDepth(i),
+    this.layers = LAYERS.map(({ layer, factor, front }, i) => ({
+      sprite: this.add
+        .tileSprite(0, 0, WIDTH, HEIGHT, layerKey(level.theme, layer))
+        .setOrigin(0)
+        .setScrollFactor(0)
+        .setDepth(front ? 20 : i),
       factor,
     }));
     this.cameras.main.setBounds(0, 0, level.length, HEIGHT).setScroll(0, 0);
+
+    this.props = level.props.map((def) => ({
+      def,
+      broken: false,
+      sprite: this.add.image(def.x, GROUND_Y + 1, def.kind).setOrigin(0.5, 1).setDepth(8),
+    }));
+    this.hazards = new HazardField(level.hazards);
+    this.hazardGfx = this.add.graphics().setDepth(9);
 
     this.rules = new ScrollerRules(level, this.run.lives, this.run.score);
     const belt = Math.min(MAX_BELT, this.run.level * 3);
@@ -134,6 +182,7 @@ export class ScrollerScene extends Phaser.Scene {
       case 'play':
         this.stepFighters(true);
         this.resolveHits();
+        if (this.phase === 'play') this.stepWorld();
         if (this.phase === 'play') this.progress();
         break;
       case 'hitstop':
@@ -240,11 +289,14 @@ export class ScrollerScene extends Phaser.Scene {
       const fromRight = e.def.from === 'right';
       const k = queued[e.def.from]++;
       const x = fromRight ? this.camX + WIDTH + 20 + k * 40 : this.camX - 20 - k * 40;
+      const profile = ARCHETYPES[e.def.kind ?? 'karateka'];
       const f = new Fighter(this, fromRight ? 'red' : 'blue', e.def.belt, false, e.def.gi);
       f.place(x, fromRight ? -1 : 1);
       f.downFrames = boss ? 40 : 30;
       f.graceFrames = boss ? 30 : 20;
-      this.foes.push({ f, brain: new CpuBrain(f, e.def.belt), uid: e.uid, onScreen: false });
+      f.speedScale = profile.speed;
+      f.sprite.setScale(profile.scale);
+      this.foes.push({ f, brain: new CpuBrain(f, e.def.belt, Math.random, profile), uid: e.uid, onScreen: false });
     }
     this.locked = true;
     sfx.gong();
@@ -272,36 +324,204 @@ export class ScrollerScene extends Phaser.Scene {
     if (full) this.cameras.main.shake(140, 0.012);
 
     if (d === this.player) {
-      const out = this.rules.hitPlayer(r.halves);
-      d.takeHit(a.x, out.knockdown);
-      if (out.gameOver) {
-        d.out = true;
-        this.saveScore();
-        this.hud.showBanner(['GAME OVER', `SCORE ${this.rules.score}`]);
-        this.setPhase('gameover');
-        return;
-      }
+      if (this.hurtPlayer(a.x, r.halves)) return;
     } else {
       const foe = this.foes.find((x) => x.f === d)!;
       const before = this.rules.score;
-      const out = this.rules.hitEnemy(foe.uid, r.halves);
-      d.takeHit(a.x, out.knockdown);
+      this.hurtFoe(foe, a.x, this.rules.hitEnemy(foe.uid, r.halves));
       this.popScore(d.x, this.rules.score - before);
-      if (out.ko) {
-        d.out = true;
-        this.tweens.add({
-          targets: [d.sprite, d.shadow],
-          alpha: 0,
-          delay: 700,
-          duration: 600,
-          onComplete: () => {
-            d.destroy();
-            this.foes = this.foes.filter((x) => x !== foe);
-          },
-        });
-      }
     }
     this.setPhase('hitstop');
+  }
+
+  /** Applies damage to the player; returns true when that ends the game. */
+  private hurtPlayer(fromX: number, halves: 1 | 2): boolean {
+    const out = this.rules.hitPlayer(halves);
+    this.player.takeHit(fromX, out.knockdown);
+    if (!out.gameOver) return false;
+    this.player.out = true;
+    this.saveScore();
+    this.hud.showBanner(['GAME OVER', `SCORE ${this.rules.score}`]);
+    this.setPhase('gameover');
+    return true;
+  }
+
+  private hurtFoe(foe: Foe, fromX: number, out: { knockdown: boolean; ko: boolean; shrug: boolean }): void {
+    const d = foe.f;
+    if (out.shrug) {
+      // Armour: the hit counts but the brute doesn't flinch.
+      d.sprite.setTintFill(0xffffff);
+      this.time.delayedCall(60, () => d.sprite.clearTint());
+    } else {
+      d.takeHit(fromX, out.knockdown);
+    }
+    if (!out.ko) return;
+    d.out = true;
+    this.dropFrom(foe);
+    this.tweens.add({
+      targets: [d.sprite, d.shadow],
+      alpha: 0,
+      delay: 700,
+      duration: 600,
+      onComplete: () => {
+        d.destroy();
+        this.foes = this.foes.filter((x) => x !== foe);
+      },
+    });
+  }
+
+  /** Bosses always leave a feast; others sometimes drop something. */
+  private dropFrom(foe: Foe): void {
+    const boss = this.rules.enemies.find((e) => e.uid === foe.uid)?.boss;
+    if (boss) this.spawnPickup('sushi', foe.f.x, 150);
+    else if (Math.random() < DROP_CHANCE) {
+      this.spawnPickup(REGULAR_DROPS[Math.floor(Math.random() * REGULAR_DROPS.length)], foe.f.x, 150);
+    }
+  }
+
+  /** Props, pickups and hazards: everything in the level that isn't a fighter. */
+  private stepWorld(): void {
+    this.breakProps();
+    this.stepPickups();
+    this.stepHazards();
+  }
+
+  /** Breakables count hits up to waist height, so mid kicks and punches smash them too. */
+  private propRect(p: Prop): Rect {
+    const w = p.sprite.width;
+    return { x0: p.def.x - w / 2, x1: p.def.x + w / 2, y0: GROUND_Y - Math.max(p.sprite.height, PROP_REACH), y1: GROUND_Y };
+  }
+
+  private breakProps(): void {
+    const eff = this.player.activeEffectors;
+    if (!eff) return;
+    for (const p of this.props) {
+      if (p.broken) continue;
+      const r = strikeBox(this.player.body, eff, this.propRect(p));
+      if (!r) continue;
+      this.player.hasHit = true;
+      this.smash(p, r);
+      return;
+    }
+  }
+
+  private smash(p: Prop, r: StrikeResult): void {
+    p.broken = true;
+    sfx.smash();
+    this.spark(r);
+    this.rules.addScore(SMASH_POINTS);
+    this.popScore(p.def.x, SMASH_POINTS);
+    const chip = p.def.kind === 'urn' ? 'chip_urn' : 'chip_wood';
+    for (let i = 0; i < 6; i++) {
+      const c = this.add.image(p.def.x + (i - 2.5) * 2, GROUND_Y - 8, chip).setDepth(9);
+      const dx = (i - 2.5) * 8 + (Math.random() - 0.5) * 6;
+      this.tweens.add({ targets: c, x: c.x + dx, angle: dx * 20, duration: 500 });
+      this.tweens.add({ targets: c, y: c.y - 14 - Math.random() * 10, duration: 220, ease: 'Quad.easeOut', yoyo: true });
+      this.tweens.add({ targets: c, alpha: 0, delay: 500, duration: 300, onComplete: () => c.destroy() });
+    }
+    p.sprite.destroy();
+    if (p.def.drop) this.spawnPickup(p.def.drop, p.def.x, GROUND_Y - 12);
+  }
+
+  private spawnPickup(kind: PickupKind, x: number, y: number): void {
+    const cx = Phaser.Math.Clamp(x, this.camX + EDGE, this.camX + WIDTH - EDGE);
+    const sprite = this.add.image(cx, y, kind === 'life' ? 'yy_full' : kind).setOrigin(0.5, 1).setDepth(9);
+    this.pickups.push({ kind, x: cx, y, vy: -2.4, age: 0, sprite });
+  }
+
+  private stepPickups(): void {
+    const p1 = this.player;
+    for (const p of this.pickups) {
+      p.age++;
+      if (p.y < GROUND_Y || p.vy < 0) {
+        p.vy += 0.2;
+        p.y = Math.min(GROUND_Y, p.y + p.vy);
+      }
+      const landed = p.y >= GROUND_Y;
+      if (landed && !p1.down && p1.air < 4 && Math.abs(p.x - p1.x) < PICKUP_REACH) {
+        this.collect(p);
+        p.age = Infinity;
+      }
+      if (p.age > PICKUP_LIFE) p.sprite.destroy();
+    }
+    this.pickups = this.pickups.filter((p) => p.age <= PICKUP_LIFE);
+  }
+
+  private collect(p: Pickup): void {
+    const got = this.rules.collect(p.kind);
+    if (got.life) {
+      sfx.oneUp();
+      this.popText(p.x, '1UP', 0x80ff80);
+    } else {
+      sfx.pickup();
+      if (got.healed > 0) this.popText(p.x, 'HEALTH UP', 0x80ff80);
+    }
+    if (got.points > 0) this.popScore(p.x, got.points);
+  }
+
+  private stepHazards(): void {
+    const bossFight = this.locked && !!this.rules.boss;
+    this.hazards.step(this.camX, this.player.x, bossFight);
+    const eff = this.player.activeEffectors;
+    const victims = [this.player, ...this.foes.filter((x) => !x.f.out).map((x) => x.f)];
+    for (const o of this.hazards.objects) {
+      const rect = HazardField.rect(o);
+      if (!rect) continue;
+      if (eff && HazardField.breakable(o)) {
+        // Low kicks and sweeps pass a little above a crab's shell; count those as hits.
+        const r = strikeBox(this.player.body, eff, { ...rect, y0: rect.y0 - CRAB_KICK_REACH });
+        if (r) {
+          this.player.hasHit = true;
+          this.kickAway(o, r);
+          continue;
+        }
+      }
+      for (const f of victims) {
+        if (!f.hittable || o.hit.has(f) || !overlaps(rect, worldHurt(f.body))) continue;
+        o.hit.add(f);
+        this.hazardHit(f, o);
+        if (this.phase !== 'play') return;
+        if (o.kind === 'crab' || o.kind === 'tile') {
+          if (o.kind === 'tile') this.shatterTile(o);
+          o.dead = true;
+          break;
+        }
+      }
+    }
+  }
+
+  private hazardHit(f: Fighter, o: HazardObj): void {
+    const halves = HAZARD_DAMAGE[o.kind];
+    sfx.thud();
+    this.cameras.main.shake(100, 0.008);
+    if (f === this.player) {
+      this.hurtPlayer(o.x, halves);
+      return;
+    }
+    const foe = this.foes.find((x) => x.f === f)!;
+    const before = this.rules.score;
+    this.hurtFoe(foe, o.x, this.rules.hazardEnemy(foe.uid, halves));
+    if (this.rules.score > before) this.popScore(f.x, this.rules.score - before);
+  }
+
+  /** A kicked crab tumbles off screen. */
+  private kickAway(o: HazardObj, r: StrikeResult): void {
+    o.dead = true;
+    sfx.hit(false);
+    this.spark(r);
+    this.rules.addScore(CRAB_POINTS);
+    this.popScore(o.x, CRAB_POINTS);
+    const dir = o.x >= this.player.x ? 1 : -1;
+    const c = this.add.image(o.x, o.y, 'crab0').setOrigin(0.5, 1).setDepth(14).setFlipY(true);
+    this.tweens.add({ targets: c, x: o.x + dir * 120, angle: dir * 540, duration: 700 });
+    this.tweens.add({ targets: c, y: o.y - 50, duration: 350, ease: 'Quad.easeOut', yoyo: true, onComplete: () => c.destroy() });
+  }
+
+  private shatterTile(o: HazardObj): void {
+    for (let i = 0; i < 4; i++) {
+      const c = this.add.image(o.x, o.y - 3, 'chip_urn').setDepth(14).setTint(0xb04030);
+      this.tweens.add({ targets: c, x: o.x + (i - 1.5) * 10, y: o.y - 10 - i * 3, alpha: 0, duration: 400, onComplete: () => c.destroy() });
+    }
   }
 
   private celebrate(): void {
@@ -320,7 +540,11 @@ export class ScrollerScene extends Phaser.Scene {
   }
 
   private popScore(x: number, points: number): void {
-    const t = pixelText(this, x, 120, String(points), { align: 0.5, color: 0xffe070, depth: 45 });
+    this.popText(x, String(points), 0xffe070);
+  }
+
+  private popText(x: number, text: string, color: number): void {
+    const t = pixelText(this, x, 120, text, { align: 0.5, color, depth: 45 });
     this.tweens.add({ targets: t, y: -16, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
@@ -338,6 +562,55 @@ export class ScrollerScene extends Phaser.Scene {
       const bx = Math.round(x.f.x) - 8;
       this.bars.fillStyle(0x101010).fillRect(bx - 1, 121, 18, 4);
       this.bars.fillStyle(0xff6a50).fillRect(bx, 122, Math.round((16 * e.hp) / e.def.hp), 2);
+    }
+    for (const p of this.pickups) {
+      p.sprite.setPosition(Math.round(p.x), Math.round(p.y));
+      p.sprite.setVisible(p.age < PICKUP_LIFE - 120 || p.age % 8 < 4);
+    }
+    this.syncHazards();
+  }
+
+  private syncHazards(): void {
+    const g = this.hazardGfx.clear();
+    const live = new Set<number>();
+    for (const o of this.hazards.objects) {
+      live.add(o.id);
+      let s = this.hazardSprites.get(o.id);
+      if (!s) {
+        s = this.add.image(0, 0, o.kind === 'crab' ? 'crab0' : o.kind);
+        if (o.kind === 'boulder') s.setOrigin(0.5).setDepth(9);
+        else if (o.kind === 'crab') s.setOrigin(0.5, 1).setDepth(9);
+        else s.setOrigin(0.5, 1).setDepth(14);
+        this.hazardSprites.set(o.id, s);
+      }
+      switch (o.kind) {
+        case 'crab':
+          s.setTexture(Math.floor(o.t / 8) % 2 ? 'crab1' : 'crab0').setPosition(Math.round(o.x), Math.round(o.y));
+          break;
+        case 'boulder':
+          s.setPosition(Math.round(o.x), Math.round(o.y - 8)).setRotation(-o.t * 0.25);
+          break;
+        case 'tile': {
+          s.setPosition(Math.round(o.x), Math.round(o.y)).setVisible(o.armed);
+          // The shadow grows as the tile gets close.
+          const k = o.armed ? Math.min(1, (o.y - 40) / (GROUND_Y - 40)) : Math.min(1, o.t / 50) * 0.4;
+          g.fillStyle(0x000000, 0.2 + 0.3 * k).fillEllipse(Math.round(o.x), GROUND_Y, 6 + 8 * k, 3);
+          break;
+        }
+        case 'hook': {
+          const tip = HazardField.hookTip(o);
+          const a = HazardField.hookAngle(o.t);
+          const top = { x: tip.x - 12 * Math.sin(a), y: tip.y - 12 * Math.cos(a) };
+          g.lineStyle(1, 0x303038).lineBetween(Math.round(o.x), o.y, Math.round(top.x), Math.round(top.y));
+          s.setPosition(Math.round(tip.x), Math.round(tip.y)).setRotation(-a);
+          break;
+        }
+      }
+    }
+    for (const [id, s] of this.hazardSprites) {
+      if (live.has(id)) continue;
+      s.destroy();
+      this.hazardSprites.delete(id);
     }
   }
 }

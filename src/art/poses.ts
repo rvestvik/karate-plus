@@ -1,4 +1,4 @@
-import { computeJoints, hurtRect, type Joints, type Pose, type Rect } from './skeleton';
+import { computeJoints, hurtRect, RADIUS, SEG, type Joints, type Pose, type Rect } from './skeleton';
 
 // Keyframe poses for every animation. Angles follow the convention in
 // skeleton.ts: limbs 0 = down, 90 = forward, 180 = up; torso + = lean forward.
@@ -12,8 +12,6 @@ const TUCK: Pose = { torso: 40, fl: [140, 20], bl: [130, 10], fa: [80, 40], ba: 
 
 const BASE_POSES = {
   stance: { torso: 8, fl: [20, -5], bl: [-25, -15], ...GUARD_ARMS },
-  walk1: { torso: 8, fl: [30, 8], bl: [-15, -25], ...GUARD_ARMS },
-  walk2: { torso: 8, fl: [6, -12], bl: [-32, -8], ...GUARD_ARMS },
   crouch: { torso: 30, fl: [82, 0], bl: [25, -95], fa: [70, 150], ba: [40, 120] },
   crouchPunch: { torso: 34, fl: [82, 0], bl: [25, -95], fa: [92, 92], ba: [40, 120] },
   block: { torso: 2, fl: [20, -5], bl: [-25, -15], fa: [100, 172], ba: [20, 110] },
@@ -92,9 +90,52 @@ function spinPoses(): Record<SpinName, Pose> {
   return out;
 }
 
-export const POSES = { ...BASE_POSES, ...spinPoses() };
+/** Frames in one walk cycle; the body moves one pixel per frame, so this is also the cycle's length in pixels. */
+export const WALK_FRAMES = 18;
+export type WalkName = `walk${number}`;
 
-export type PoseName = keyof typeof POSES;
+/**
+ * A shuffle step: the front foot steps out while the back foot is planted,
+ * then the back foot follows. Each planted foot slides back exactly one pixel
+ * per frame against the hip, so it stays put while the body moves forward.
+ * Leg angles come from two-bone IK; the hip dips as the stance widens.
+ */
+function walkPoses(): Record<WalkName, Pose> {
+  const front = 3;
+  const back = -7;
+  const reach = WALK_FRAMES / 4;
+  const footY = 0.5 - RADIUS.foot;
+  const leg = (dx: number, dy: number): [number, number] => {
+    const len = Math.min(Math.hypot(dx, dy), SEG.thigh + SEG.shin - 0.01);
+    const a = (Math.atan2(dx, dy) * 180) / Math.PI;
+    const b = (Math.acos(len / (SEG.thigh + SEG.shin)) * 180) / Math.PI;
+    return [a + b, a - b];
+  };
+  /** Offset from the foot's rest spot and lift, half a cycle swinging forward then half planted. */
+  const foot = (p: number): [number, number] =>
+    p < 0.5 ? [reach * (4 * p - 1), 2.5 * Math.sin(2 * Math.PI * p)] : [reach * (3 - 4 * p), 0];
+  const out = {} as Record<WalkName, Pose>;
+  for (let k = 0; k < WALK_FRAMES; k++) {
+    const p = k / WALK_FRAMES;
+    const [fo, fLift] = foot(p);
+    const [bo, bLift] = foot((p + 0.5) % 1);
+    const fx = front + fo;
+    const bx = back + bo;
+    const hipY = footY - Math.min(20.8, Math.sqrt(21.6 ** 2 - Math.max(Math.abs(fx), Math.abs(bx)) ** 2));
+    out[`walk${k}`] = {
+      torso: 8,
+      fl: leg(fx, footY - fLift - hipY),
+      bl: leg(bx, footY - bLift - hipY),
+      ...GUARD_ARMS,
+      hip: { x: 0, y: hipY },
+    };
+  }
+  return out;
+}
+
+export type PoseName = keyof typeof BASE_POSES | WalkName | SpinName;
+export const POSES: Record<PoseName, Pose> = { ...BASE_POSES, ...walkPoses(), ...spinPoses() };
+
 export const POSE_NAMES = Object.keys(POSES) as PoseName[];
 
 const jointCache = new Map<PoseName, Joints>();

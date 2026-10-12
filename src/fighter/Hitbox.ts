@@ -22,6 +22,10 @@ function inside(r: Rect, x: number, y: number, pad = 1): boolean {
   return x >= r.x0 - pad && x <= r.x1 + pad && y >= r.y0 - pad && y <= r.y1 + pad;
 }
 
+export function overlaps(a: Rect, b: Rect): boolean {
+  return a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1;
+}
+
 /** The joint a striking limb extends from, so the outer half of the limb can be sampled. */
 const ROOT: Record<Effector, 'fk' | 'bk' | 'fe' | 'be' | null> = {
   ff: 'fk',
@@ -49,7 +53,11 @@ export interface StrikeResult {
  * attacker is jammed too close or only clips with the shin or forearm.
  */
 export function strike(att: Body, effectors: Effector[], def: Body): StrikeResult | null {
-  const box = worldHurt(def);
+  return strikeBox(att, effectors, worldHurt(def));
+}
+
+/** The same test against any world rect: a prop, a hazard or a ball. */
+export function strikeBox(att: Body, effectors: Effector[], box: Rect): StrikeResult | null {
   const j = jointsOf(att.pose);
   for (const e of effectors) {
     const tipL = effectorPoint(att.pose, e);

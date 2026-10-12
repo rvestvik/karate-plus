@@ -6,6 +6,7 @@ import { MatchScene } from './scenes/MatchScene';
 import { ResultScene } from './scenes/ResultScene';
 import { PoseDebugScene } from './scenes/PoseDebugScene';
 import { ScrollerScene } from './scenes/ScrollerScene';
+import { BonusScene } from './scenes/BonusScene';
 
 /** Largest whole-number zoom that fits the window, for crisp pixels. */
 function fitZoom(): number {
@@ -21,7 +22,7 @@ const game = new Phaser.Game({
   backgroundColor: '#000000',
   scale: { mode: Phaser.Scale.NONE, autoCenter: Phaser.Scale.CENTER_BOTH, zoom: fitZoom() },
   input: { gamepad: true },
-  scene: [BootScene, TitleScene, MatchScene, ResultScene, ScrollerScene, PoseDebugScene],
+  scene: [BootScene, TitleScene, MatchScene, ResultScene, ScrollerScene, BonusScene, PoseDebugScene],
 });
 
 window.addEventListener('resize', () => game.scale.setZoom(fitZoom()));

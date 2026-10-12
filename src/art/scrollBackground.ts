@@ -7,11 +7,13 @@ import { rng } from './background';
 // 320-wide canvas that tiles horizontally. Far layers scroll slower than the
 // ground for parallax. Same hard bands and dithering as the beach.
 
-export type Layer = 'far' | 'mid' | 'ground';
-export const LAYERS: { layer: Layer; factor: number }[] = [
+export type Layer = 'far' | 'mid' | 'ground' | 'fg';
+/** `front` layers are drawn over the fighters. */
+export const LAYERS: { layer: Layer; factor: number; front?: boolean }[] = [
   { layer: 'far', factor: 0.2 },
   { layer: 'mid', factor: 0.5 },
   { layer: 'ground', factor: 1 },
+  { layer: 'fg', factor: 1.4, front: true },
 ];
 /** Top of the ground layer; everything above it belongs to the backdrop. */
 const GROUND_TOP = 150;
@@ -57,7 +59,7 @@ function painter(ctx: Ctx) {
 
 type Paint = (p: ReturnType<typeof painter>, rand: () => number) => void;
 
-const THEMES: Record<Theme, Record<Layer, Paint>> = {
+const THEMES: Record<Theme, Record<Exclude<Layer, 'fg'>, Paint>> = {
   beach: {
     far: (p, rand) => {
       p.sky(['#18184a', '#25246a', '#3a2e86', '#5a3a96', '#86468e', '#b45682', '#de6c6c', '#f48c58', '#fbb050'], 98);
@@ -243,14 +245,57 @@ const THEMES: Record<Theme, Record<Layer, Paint>> = {
   },
 };
 
-/** Bakes the three layers for a theme, once. */
+/** Sparse props along the bottom edge, below the fighters' feet, that pass in front of them. */
+const FOREGROUND: Record<Theme, Paint> = {
+  beach: (p, rand) => {
+    for (const cx of [70, 236]) {
+      for (let i = 0; i < 9; i++) {
+        const h = 6 + Math.round(rand() * 9);
+        p.rect(i % 2 ? '#2e6a30' : '#3e8a3a', cx + i * 2 - 8 + Math.round(rand() * 2), HEIGHT - h, 1, h);
+      }
+    }
+    p.rect('#f0d0c0', 150, 194, 5, 3);
+    p.rect('#d09080', 151, 195, 3, 1);
+  },
+  harbour: (p) => {
+    // A mooring bollard and a coil of rope.
+    p.rect('#2a2a30', 244, 188, 12, 12);
+    p.rect('#40404a', 242, 186, 16, 4);
+    p.rect('#5a5a66', 246, 189, 3, 10);
+    for (let r = 0; r < 4; r++) p.rect(r % 2 ? '#8a6a3a' : '#b08a4a', 96 - r * 2, 192 + r * 2, 26 + r * 4, 2);
+  },
+  temple: (p, rand) => {
+    // Mossy stepping stones.
+    for (const [cx, w] of [
+      [60, 22],
+      [210, 18],
+    ]) {
+      p.rect('#5a5850', cx, 190, w, 10);
+      p.rect('#787468', cx + 2, 188, w - 4, 3);
+      for (let i = 0; i < 6; i++) p.rect('#4a7a3a', cx + rand() * w, 188 + rand() * 4, 2, 1);
+    }
+  },
+  mountain: (p) => {
+    for (const [cx, w] of [
+      [30, 26],
+      [190, 34],
+    ]) {
+      p.rect('#24242e', cx, 190, w, 10);
+      p.rect('#34343e', cx + 3, 187, w - 8, 4);
+      p.rect('#d8e0f0', cx + 4, 186, w - 12, 2);
+    }
+  },
+};
+
+/** Bakes the layers for a theme, once. */
 export function createScrollBackground(scene: Phaser.Scene, theme: Theme): void {
   LAYERS.forEach(({ layer }, i) => {
     const key = layerKey(theme, layer);
     if (scene.textures.exists(key)) return;
     const tex = scene.textures.createCanvas(key, WIDTH, HEIGHT);
     if (!tex) throw new Error(`could not create ${key}`);
-    THEMES[theme][layer](painter(tex.getContext()), rng(1987 + i * 31 + theme.length * 7));
+    const paint = layer === 'fg' ? FOREGROUND[theme] : THEMES[theme][layer];
+    paint(painter(tex.getContext()), rng(1987 + i * 31 + theme.length * 7));
     tex.refresh();
   });
 }

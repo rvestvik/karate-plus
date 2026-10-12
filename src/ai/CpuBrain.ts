@@ -2,6 +2,7 @@ import type { FighterId } from '../config';
 import { MAX_BELT } from '../art/palette';
 import type { Fighter } from '../fighter/Fighter';
 import { inputFor, NO_INPUT, type Command, type InputState } from '../fighter/input';
+import { ARCHETYPES, weightedPick, type Archetype } from './archetypes';
 import { ATTACKS, MOVES, moveTiming, totalFrames, type AttackInfo, type MoveId } from '../fighter/moves';
 
 /**
@@ -24,6 +25,7 @@ export class CpuBrain {
     private readonly me: Fighter,
     belt: number,
     private readonly rng: () => number = Math.random,
+    private readonly profile: Archetype = ARCHETYPES.karateka,
   ) {
     this.setBelt(belt);
   }
@@ -92,7 +94,7 @@ export class CpuBrain {
       // Target is behind: wait for the auto-turn, or slip away if crowded.
       return dist < 14 ? this.press('walkF', 8) : NO_INPUT;
     }
-    const preferred = 24 + Math.round(this.rng() * 6);
+    const preferred = this.profile.range + Math.round(this.rng() * 6);
     if (dist > preferred + 4) return this.press('walkF', 6 + Math.floor(this.rng() * 10));
     if (dist < 15) {
       if (this.rng() < 0.15 * this.skill) return this.press('somersault', 2);
@@ -125,7 +127,7 @@ export class CpuBrain {
       const seenAt = Math.round(9 - 7 * this.skill);
       if (o.moveFrame < seenAt) continue;
       this.reacted.set(o.id, o.moveSerial);
-      if (this.rng() > 0.15 + 0.7 * this.skill) continue;
+      if (this.rng() > (0.15 + 0.7 * this.skill) * this.profile.defence) continue;
       const remaining = totalFrames(o.move) - o.moveFrame;
       const facingThem = (o.x - me.x) * me.facing > 0;
       if (height === 'low') return this.press('jump', 2);
@@ -150,7 +152,7 @@ export class CpuBrain {
   }
 
   private chooseAttack(t: Fighter, dist: number, side: 1 | -1): AttackInfo | null {
-    if (this.rng() > 0.35 + 0.45 * this.skill) return null;
+    if (this.rng() > (0.35 + 0.45 * this.skill) * this.profile.aggression) return null;
     const slop = 2 + (1 - this.skill) * 10;
     const options = ATTACKS.filter((a) => {
       if (a.side !== side) return false;
@@ -161,6 +163,6 @@ export class CpuBrain {
       return true;
     });
     if (options.length === 0) return null;
-    return options[Math.floor(this.rng() * options.length)];
+    return weightedPick(options, (a) => this.profile.moveBias[a.move.id] ?? 1, this.rng);
   }
 }

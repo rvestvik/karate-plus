@@ -113,4 +113,20 @@ export const sfx = {
     tone(660, 0.06, 0.2, 'square');
     tone(990, 0.08, 0.2, 'square', undefined, 0.06);
   },
+  /** A crate or pot breaking. */
+  smash() {
+    noiseBurst(0.22, 700, 0.6, 0.8, 200, 'lowpass');
+    noiseBurst(0.1, 2400, 1.5, 0.4, 1200);
+    tone(120, 0.12, 0.4, 'triangle', 60);
+  },
+  pickup() {
+    tone(880, 0.07, 0.2, 'square');
+    tone(1320, 0.1, 0.2, 'square', undefined, 0.07);
+  },
+  oneUp() {
+    [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.1, 0.2, 'square', undefined, i * 0.08));
+  },
+  bounce() {
+    tone(320, 0.08, 0.25, 'sine', 180);
+  },
 };

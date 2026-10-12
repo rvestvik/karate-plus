@@ -4,6 +4,7 @@ import { pixelText } from '../art/font';
 import { BELTS, LABEL } from '../art/palette';
 import { sfx } from '../audio/sfx';
 import { formatPoints } from '../match/Hud';
+import { bonusAfter } from '../match/BonusRules';
 import { advanceCampaign } from '../match/MatchRules';
 import { loadHiscore, onFire, saveHiscore } from './common';
 import type { ResultData } from './MatchScene';
@@ -64,6 +65,9 @@ export class ResultScene extends Phaser.Scene {
       }
     }
 
+    if (!out.gameOver && bonusAfter(data.campaign.round)) {
+      pixelText(this, 160, 172, 'BONUS ROUND NEXT', { align: 0.5, color: 0x80ff80 });
+    }
     const prompt = pixelText(this, 160, 186, 'PRESS FIRE', { align: 0.5 });
     this.time.addEvent({ delay: 450, loop: true, callback: () => prompt.setVisible(!prompt.visible) });
 
@@ -72,7 +76,7 @@ export class ResultScene extends Phaser.Scene {
       onFire(this, () => {
         sfx.select();
         if (out.gameOver) this.scene.start('title');
-        else this.scene.start('match', { campaign: out.campaign });
+        else this.scene.start(bonusAfter(data.campaign.round) ? 'bonus' : 'match', { campaign: out.campaign });
       }),
     );
   }
