@@ -5,7 +5,7 @@ import type { HazardDef, HazardKind } from './levels';
 // Stage hazards as pure state machines: each frame they move and expose a
 // world rect that hurts whoever it touches. Rendering lives in the scene.
 
-export const CRAB_SPEED = 0.6;
+export const CRAB_SPEED = 1.2;
 export const BOULDER_SPEED = 1.6;
 /** Frames a falling tile's shadow shows before it drops. */
 export const TILE_WARN = 50;
@@ -82,32 +82,37 @@ export class HazardField {
     });
 
     for (const o of this.objects) {
-      o.t++;
-      switch (o.kind) {
-        case 'crab':
-          o.x -= CRAB_SPEED;
-          break;
-        case 'boulder':
-          o.x -= BOULDER_SPEED;
-          // Small hops as it rolls over the rough ground.
-          o.y = GROUND_Y - Math.abs(Math.sin(o.t / 9)) * 3;
-          break;
-        case 'tile':
-          if (o.t > TILE_WARN) {
-            o.armed = true;
-            const f = o.t - TILE_WARN;
-            o.y = TILE_FALL_FROM + 0.12 * f * f;
-            if (o.y >= GROUND_Y) o.dead = true;
-          }
-          break;
-        case 'hook':
-          // It can hit again on its next pass, so forget victims at each end of the swing.
-          if (o.t % (HOOK_PERIOD / 2) === Math.round(HOOK_PERIOD / 4)) o.hit.clear();
-          break;
-      }
+      HazardField.advance(o);
       if (o.x < camX - 24) o.dead = true;
     }
     this.objects = this.objects.filter((o) => !o.dead);
+  }
+
+  /** Moves one hazard a frame. Static so the AI can look ahead on a copy. */
+  static advance(o: HazardObj): void {
+    o.t++;
+    switch (o.kind) {
+      case 'crab':
+        o.x -= CRAB_SPEED;
+        break;
+      case 'boulder':
+        o.x -= BOULDER_SPEED;
+        // Small hops as it rolls over the rough ground.
+        o.y = GROUND_Y - Math.abs(Math.sin(o.t / 9)) * 3;
+        break;
+      case 'tile':
+        if (o.t > TILE_WARN) {
+          o.armed = true;
+          const f = o.t - TILE_WARN;
+          o.y = TILE_FALL_FROM + 0.12 * f * f;
+          if (o.y >= GROUND_Y) o.dead = true;
+        }
+        break;
+      case 'hook':
+        // It can hit again on its next pass, so forget victims at each end of the swing.
+        if (o.t % (HOOK_PERIOD / 2) === Math.round(HOOK_PERIOD / 4)) o.hit.clear();
+        break;
+    }
   }
 
   /** The hook's angle from vertical, in radians. */

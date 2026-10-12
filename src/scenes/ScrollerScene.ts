@@ -13,6 +13,7 @@ import { NO_INPUT } from '../fighter/input';
 import { PlayerInput } from '../fighter/PlayerInput';
 import type { Rect } from '../art/skeleton';
 import { HazardField, type HazardObj } from '../scroller/hazards';
+import { evasion } from '../ai/evade';
 import { LEVELS, type PickupKind, type PropDef } from '../scroller/levels';
 import { ScrollerHud } from '../scroller/ScrollerHud';
 import { CRAB_POINTS, DROP_CHANCE, ScrollerRules, START_LIVES } from '../scroller/ScrollerRules';
@@ -218,13 +219,25 @@ export class ScrollerScene extends Phaser.Scene {
 
   private stepFighters(live: boolean): void {
     const standing = this.foes.filter((x) => !x.f.out);
-    if (live) this.assignSlots(standing);
+    if (live) {
+      this.assignSlots(standing);
+      this.evadeHazards(standing);
+    }
     const playerInput = live && !this.player.out ? this.input1.read() : NO_INPUT;
     const inputs = this.foes.map((x) => (live && !x.f.out ? x.brain.think([this.player], null) : NO_INPUT));
     this.updateBounds();
     this.player.step(playerInput, standing.map((x) => x.f));
     this.foes.forEach((x, i) => x.f.step(inputs[i], [this.player]));
     this.keepApart(standing.map((x) => x.f));
+  }
+
+  /** Enemies see hazards coming and jump, duck or step aside. */
+  private evadeHazards(standing: Foe[]): void {
+    for (const x of standing) {
+      if (!x.onScreen || !x.f.actionable) continue;
+      const e = evasion(x.f.body, this.hazards.objects, (o) => o.hit.has(x.f), x.f);
+      if (e) x.brain.evade(e);
+    }
   }
 
   /** The nearest enemies get to attack; the others wait their turn at a distance. */

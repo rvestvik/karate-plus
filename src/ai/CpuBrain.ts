@@ -3,6 +3,7 @@ import { MAX_BELT } from '../art/palette';
 import type { Fighter } from '../fighter/Fighter';
 import { inputFor, NO_INPUT, type Command, type InputState } from '../fighter/input';
 import { ARCHETYPES, weightedPick, type Archetype } from './archetypes';
+import type { Evasion } from './evade';
 import { ATTACKS, MOVES, moveTiming, totalFrames, type AttackInfo, type MoveId } from '../fighter/moves';
 
 /**
@@ -18,6 +19,8 @@ export class CpuBrain {
   private retarget = 0;
   private skill = 0;
   private readonly reacted = new Map<FighterId, number>();
+  /** Whether this fighter noticed each hazard threat, decided once per threat. */
+  private readonly noticed = new Map<string, boolean>();
   /** When set, hang back at about this distance and don't attack (waiting a turn in a crowd). */
   standoff: number | null = null;
 
@@ -49,6 +52,26 @@ export class CpuBrain {
     return Math.round(34 - 26 * this.skill + this.rng() * 14 * (1 - this.skill));
   }
 
+  /**
+   * Dodges a stage hazard ahead of the next think(). Skilled fighters almost
+   * always notice; novices sometimes walk right into it. True if it dodges.
+   */
+  evade(e: Evasion): boolean {
+    if (!this.me.actionable) return false;
+    let seen = this.noticed.get(e.key);
+    if (seen === undefined) {
+      seen = this.rng() < 0.7 + 0.3 * this.skill;
+      this.noticed.set(e.key, seen);
+    }
+    if (!seen) return false;
+    if (e.cmd === 'crouchPunch') this.strike(e.cmd);
+    else this.press(e.cmd, e.cmd === 'jump' ? 2 : 4);
+    // think() hands out the held input, so count this frame too.
+    this.holdFrames++;
+    this.cooldown = 0;
+    return true;
+  }
+
   think(others: Fighter[], leader: FighterId | null): InputState {
     const me = this.me;
     if (me.mode === 'move' && this.holdFrames > 0) {
@@ -60,15 +83,16 @@ export class CpuBrain {
       return NO_INPUT;
     }
     const standing = others.filter((o) => !o.down);
-    if (standing.length === 0) return NO_INPUT;
 
     const defence = this.defend(standing);
     if (defence) return defence;
 
+    // Finish a held input (a walk, or a hazard dodge) even while nobody's standing.
     if (this.holdFrames > 0) {
       this.holdFrames--;
       return this.hold;
     }
+    if (standing.length === 0) return NO_INPUT;
     if (this.cooldown > 0) {
       this.cooldown--;
       return NO_INPUT;
